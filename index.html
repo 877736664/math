@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数学乐园 - 小学生数学学习平台</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#f97316',
+                        accent: '#10b981',
+                        background: '#f0f9ff',
+                        card: '#ffffff',
+                        text: '#1e293b',
+                        muted: '#64748b'
+                    },
+                    fontFamily: {
+                        sans: ['Comic Sans MS', 'Arial', 'sans-serif']
+                    },
+                    animation: {
+                        'bounce-slow': 'bounce 2s infinite',
+                        'float': 'float 3s ease-in-out infinite',
+                        'wiggle': 'wiggle 1s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        },
+                        wiggle: {
+                            '0%, 100%': { transform: 'rotate(-3deg)' },
+                            '50%': { transform: 'rotate(3deg)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .text-shadow {
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            }
+            .card-hover {
+                @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+            }
+            .btn-primary {
+                @apply bg-primary hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-full shadow-md transition-all duration-300 hover:shadow-lg transform hover:-translate-y-0.5;
+            }
+            .btn-secondary {
+                @apply bg-secondary hover:bg-orange-600 text-white font-bold py-3 px-6 rounded-full shadow-md transition-all duration-300 hover:shadow-lg transform hover:-translate-y-0.5;
+            }
+            .btn-accent {
+                @apply bg-accent hover:bg-green-600 text-white font-bold py-3 px-6 rounded-full shadow-md transition-all duration-300 hover:shadow-lg transform hover:-translate-y-0.5;
+            }
+        }
+    </style>
+</head>
+<body class="bg-background font-sans text-text min-h-screen flex flex-col">
+    <!-- 顶部导航栏 -->
+    <header class="bg-white shadow-md">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <img src="https://p26-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/2f02608bd950445583af9067a7a8d89c~tplv-a9rns2rl98-image.image?lk3s=8e244e95&rcl=20260305113710F3130808572EA348C294&rrcfp=f06b921b&x-expires=1775273871&x-signature=R8TYo%2BkbZdse3Ucr1RuQ%2BUdjiHY%3D" alt="数学乐园" class="h-12">
+                <h1 class="text-2xl font-bold text-primary hidden md:block">数学乐园</h1>
+            </div>
+            <nav class="hidden md:flex items-center space-x-6">
+                <a href="#home" class="text-primary font-bold hover:text-blue-700 transition-colors">首页</a>
+                <a href="#learning" class="text-text font-bold hover:text-primary transition-colors">知识点学习</a>
+                <a href="#games" class="text-text font-bold hover:text-primary transition-colors">趣味游戏</a>
+                <a href="#ai-qa" class="text-text font-bold hover:text-primary transition-colors">AI问答</a>
+                <a href="#progress" class="text-text font-bold hover:text-primary transition-colors">学习进度</a>
+            </nav>
+            <div class="flex items-center space-x-4">
+                <button class="btn-primary hidden md:block">
+                    <i class="fa fa-user-circle mr-2"></i>登录/注册
+                </button>
+                <button id="mobile-menu-button" class="md:hidden text-primary text-2xl">
+                    <i class="fa fa-bars"></i>
+                </button>
+            </div>
+        </div>
+        <!-- 移动端菜单 -->
+        <div id="mobile-menu" class="md:hidden bg-white shadow-lg rounded-b-lg hidden absolute w-full z-50">
+            <div class="container mx-auto px-4 py-2 flex flex-col space-y-3">
+                <a href="#home" class="text-primary font-bold py-2 hover:text-blue-700 transition-colors">首页</a>
+                <a href="#learning" class="text-text font-bold py-2 hover:text-primary transition-colors">知识点学习</a>
+                <a href="#games" class="text-text font-bold py-2 hover:text-primary transition-colors">趣味游戏</a>
+                <a href="#ai-qa" class="text-text font-bold py-2 hover:text-primary transition-colors">AI问答</a>
+                <a href="#progress" class="text-text font-bold py-2 hover:text-primary transition-colors">学习进度</a>
+                <button class="btn-primary w-full">
+                    <i class="fa fa-user-circle mr-2"></i>登录/注册
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区域 -->
+    <main class="flex-grow">
+        <!-- 首页/欢迎区域 -->
+        <section id="home" class="py-10 md:py-20 bg-gradient-to-b from-blue-50 to-white">
+            <div class="container mx-auto px-4">
+                <div class="flex flex-col md:flex-row items-center justify-between">
+                    <div class="md:w-1/2 mb-10 md:mb-0">
+                        <h1 class="text-4xl md:text-5xl font-bold text-primary mb-6 leading-tight text-shadow">
+                            欢迎来到<span class="text-secondary">数学乐园</span>
+                        </h1>
+                        <p class="text-lg md:text-xl text-muted mb-8">
+                            在这里，我们将通过有趣的方式帮助你学习数学，解决数学难题，让数学变得简单又好玩！
+                        </p>
+                        <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+                            <button class="btn-primary text-lg">
+                                <i class="fa fa-play-circle mr-2"></i>开始学习
+                            </button>
+                            <button class="btn-secondary text-lg">
+                                <i class="fa fa-gamepad mr-2"></i>玩游戏
+                            </button>
+                        </div>
+                    </div>
+                    <div class="md:w-1/2 flex justify-center">
+                        <img src="https://p11-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/89c94403fa16479ba5101c0147c70b24~tplv-a9rns2rl98-image.image?lk3s=8e244e95&rcl=20260305113710F3130808572EA348C294&rrcfp=f06b921b&x-expires=1775273874&x-signature=U9rdDblUu6G378PSR9t2npqhlzg%3D" alt="快乐学习数学" class="w-full max-w-md rounded-lg shadow-xl animate-float">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 特色功能区域 -->
+        <section class="py-15 bg-white">
+            <div class="container mx-auto px-4">
+                <h2 class="text-3xl font-bold text-center text-primary mb-12">我们的特色功能</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <!-- 知识点学习 -->
+                    <div class="bg-card rounded-xl shadow-md p-6 card-hover">
+                        <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-6 mx-auto">
+                            <i class="fa fa-book text-primary text-3xl"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-center mb-4">知识点学习</h3>
+                        <p class="text-muted text-center">
+                            按年级分类的数学知识点，图文并茂的讲解，让你轻松掌握数学概念。
+                        </p>
+                        <div class="text-center mt-6">
+                            <a href="#learning" class="text-primary font-bold hover:underline">
+                                开始学习 <i class="fa fa-arrow-right ml-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- 趣味游戏 -->
+                    <div class="bg-card rounded-xl shadow-md p-6 card-hover">
+                        <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-6 mx-auto">
+                            <i class="fa fa-gamepad text-secondary text-3xl"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-center mb-4">趣味游戏</h3>
+                        <p class="text-muted text-center">
+                            通过有趣的数学游戏，巩固所学知识，提高计算能力和逻辑思维。
+                        </p>
+                        <div class="text-center mt-6">
+                            <a href="#games" class="text-secondary font-bold hover:underline">
+                                玩游戏 <i class="fa fa-arrow-right ml-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- AI问答 -->
+                    <div class="bg-card rounded-xl shadow-md p-6 card-hover">
+                        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-6 mx-auto">
+                            <i class="fa fa-comments text-accent text-3xl"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-center mb-4">AI智能问答</h3>
+                        <p class="text-muted text-center">
+                            遇到不会的数学题？问我们的AI助手，它会给你详细的解答和解题思路。
+                        </p>
+                        <div class="text-center mt-6">
+                            <a href="#ai-qa" class="text-accent font-bold hover:underline">
+                                提问 <i class="fa fa-arrow-right ml-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 知识点学习区域 -->
+        <section id="learning" class="py-15 bg-blue-50">
+            <div class="container mx-auto px-4">
+                <div class="text-center mb-12">
+                    <h2 class="text-3xl font-bold text-primary mb-4">知识点学习</h2>
+                    <p class="text-muted max-w-2xl mx-auto">
+                        选择你的年级，开始学习吧！我们为每个年级精心设计了符合教学大纲的知识点。
+                    </p>
+                </div>
+                
+                <!-- 年级选择 -->
+                <div class="flex flex-wrap justify-center gap-4 mb-12">
+                    <button class="grade-btn btn-primary active">一年级</button>
+                    <button class="grade-btn bg-white text-primary hover:bg-primary hover:text-white font-bold py-3 px-6 rounded-full shadow-md transition-all duration-300">二年级</button>
+                    <button class="grade-btn bg-white text-primary hover:bg-primary hover:text-white font-bold py-3 px-6 rounded-full shadow-md transition-all duration-300">三年级</button>
+                    <button class="grade-btn bg-white text-primary hover:bg-primary hover:text-white font-bold py-3 px-6 rounded-full shadow-md transition-all duration-300">四年级</button>
+                    <button class="grade-btn bg-white text-primary hover:bg-primary hover:text-white font-bold py-3 px-6 rounded-full shadow-md transition-all duration-300">五年级</button>
+                    <button class="grade-btn bg-white text-primary hover:bg-primary hover:text-white font-bold py-3 px-6 rounded-full shadow-md transition-all duration-300">六年级</button>
+                </div>
+                
+                <!-- 知识点卡片 -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- 知识点1 -->
+                    <div class="bg-white rounded-xl shadow-md overflow-hidden card-hover">
+                        <div class="h-40 bg-blue-100 flex items-center justify-center">
+                            <img src="https://p9-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/6ec352b89083493192afd6cd859aed68~tplv-a9rns2rl98-image.image?lk3s=8e244e95&rcl=20260305113710F3130808572EA348C294&rrcfp=f06b921b&x-expires=1775273871&x-signature=%2BoVLhLUR%2FrdLA1%2FgCwtOry0QXcw%3D" alt="10以内的加减法" class="h-32 object-contain">
+                        </div>
+                        <div class="p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-xl font-bold">10以内的加减法</h3>
+                                <span class="bg-green-100 text-green-800 text-xs font-bold px-2.5 py-0.5 rounded-full">基础</span>
+                            </div>
+                            <p class="text-muted mb-4">
+                                学习10以内数字的加法和减法，掌握基本的计算方法。
+                            </p>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-muted">
+                                    <i class="fa fa-clock-o mr-1"></i> 预计学习时间: 20分钟
+                                </span>
+                                <button class="bg-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                                    开始学习
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 知识点2 -->
+                    <div class="bg-white rounded-xl shadow-md overflow-hidden card-hover">
+                        <div class="h-40 bg-blue-100 flex items-center justify-center">
+                            <img src="https://p26-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/2f02608bd950445583af9067a7a8d89c~tplv-a9rns2rl98-image.image?lk3s=8e244e95&rcl=20260305113710F3130808572EA348C294&rrcfp=f06b921b&x-expires=1775273871&x-signature=R8TYo%2BkbZdse3Ucr1RuQ%2BUdjiHY%3D" alt="认识数字" class="h-32 object-contain">
+                        </div>
+                        <div class="p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-xl font-bold">认识数字</h3>
+                                <span class="bg-green-100 text-green-800 text-xs font-bold px-2.5 py-0.5 rounded-full">基础</span>
+                            </div>
+                            <p class="text-muted mb-4">
+                                认识0-100的数字，了解数字的顺序和大小关系。
+                            </p>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-muted">
+                                    <i class="fa fa-clock-o mr-1"></i> 预计学习时间: 15分钟
+                                </span>
+                                <button class="bg-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                                    开始学习
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 知识点3 -->
+                    <div class="bg-white rounded-xl shadow-md overflow-hidden card-hover">
+                        <div class="h-40 bg-blue-100 flex items-center justify-center">
+                            <i class="fa fa-cubes text-primary text-6xl"></i>
+                        </div>
+                        <div class="p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-xl font-bold">认识图形</h3>
+                                <span class="bg-yellow-100 text-yellow-800 text-xs font-bold px-2.5 py-0.5 rounded-full">进阶</span>
+                            </div>
+                            <p class="text-muted mb-4">
+                                认识基本的几何图形，如圆形、正方形、三角形等。
+                            </p>
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-muted">
+                                    <i class="fa fa-clock-o mr-1"></i> 预计学习时间: 25分钟
+                                </span>
+                                <button class="bg-primary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                                    开始学习
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-10">
+                    <button class="btn-primary">
+                        查看更多知识点 <i class="fa fa-angle-right ml-1"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 趣味游戏区域 -->
+        <section id="games" class="py-15 bg-white">
+            <div class="container mx-auto px-4">
+                <div class="text-center mb-12">
+                    <h2 class="text-3xl font-bold text-secondary mb-4">趣味数学游戏</h2>
+                    <p class="text-muted max-w-2xl mx-auto">
+                        在游戏中学习，在快乐中成长！这些有趣的数学游戏将帮助你巩固所学知识。
+                    </p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <!-- 游戏1 -->
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover">
+                        <div class="h-48 bg-gradient-to-r from-orange-400 to-pink-500 relative">
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <i class="fa fa-calculator text-white text-6xl animate-bounce-slow"></i>
+                            </div>
+                            <div class="absolute top-4 right-4 bg-white text-secondary font-bold px-3 py-1 rounded-full">
+                                热门
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <h3 class="text-xl font-bold mb-2">算术挑战</h3>
+                            <p class="text-muted mb-4">
+                                在限定时间内完成尽可能多的算术题，挑战你的计算速度和准确性！
+                            </p>
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center">
+                                    <div class="flex">
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star-half-o text-yellow-400"></i>
+                                    </div>
+                                    <span class="text-sm text-muted ml-2">(4.5)</span>
+                                </div>
+                                <button class="bg-secondary hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                                    开始游戏
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 游戏2 -->
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover">
+                        <div class="h-48 bg-gradient-to-r from-blue-400 to-purple-500 relative">
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <i class="fa fa-puzzle-piece text-white text-6xl animate-float"></i>
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <h3 class="text-xl font-bold mb-2">数字拼图</h3>
+                            <p class="text-muted mb-4">
+                                将打乱的数字按正确顺序排列，锻炼你的逻辑思维和数字敏感度。
+                            </p>
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center">
+                                    <div class="flex">
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star-o text-yellow-400"></i>
+                                    </div>
+                                    <span class="text-sm text-muted ml-2">(4.0)</span>
+                                </div>
+                                <button class="bg-secondary hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                                    开始游戏
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 游戏3 -->
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover">
+                        <div class="h-48 bg-gradient-to-r from-green-400 to-teal-500 relative">
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <i class="fa fa-line-chart text-white text-6xl animate-wiggle"></i>
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <h3 class="text-xl font-bold mb-2">数学连连看</h3>
+                            <p class="text-muted mb-4">
+                                连接相等的数字或算式结果，消除所有方块，考验你的观察力和计算能力。
+                            </p>
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center">
+                                    <div class="flex">
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star text-yellow-400"></i>
+                                        <i class="fa fa-star-half-o text-yellow-400"></i>
+                                    </div>
+                                    <span class="text-sm text-muted ml-2">(4.5)</span>
+                                </div>
+                                <button class="bg-secondary hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                                    开始游戏
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-10">
+                    <button class="btn-secondary">
+                        探索更多游戏 <i class="fa fa-angle-right ml-1"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- AI问答区域 -->
+        <section id="ai-qa" class="py-15 bg-gradient-to-b from-white to-blue-50">
+            <div class="container mx-auto px-4">
+                <div class="flex flex-col lg:flex-row items-center gap-10">
+                    <div class="lg:w-1/2">
+                        <h2 class="text-3xl font-bold text-accent mb-6">AI数学助手</h2>
+                        <p class="text-lg text-muted mb-8">
+                            遇到不会的数学题？只需输入你的问题，我们的AI助手会为你提供详细的解答和解题思路，帮助你更好地理解数学概念。
+                        </p>
+                        <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+                            <div class="flex items-start mb-4">
+                                <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                                    <i class="fa fa-user text-primary"></i>
+                                </div>
+                                <div class="bg-gray-100 rounded-lg p-3 rounded-tl-none">
+                                    <p>什么是分数？请简单解释一下。</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start">
+                                <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+                                    <i class="fa fa-robot text-accent"></i>
+                                </div>
+                                <div class="bg-green-50 rounded-lg p-3 rounded-tl-none max-w-[80%]">
+                                    <p class="mb-2"><strong>分数</strong>是表示一个数是另一个数的几分之几的数。</p>
+                                    <p class="mb-2">分数由两部分组成：</p>
+                                    <ul class="list-disc pl-5 mb-2">
+                                        <li><strong>分子</strong>：写在上面的数，表示取了多少份</li>
+                                        <li><strong>分母</strong>：写在下面的数，表示把一个整体平均分成多少份</li>
+                                    </ul>
+                                    <p>例如，1/2表示把一个整体平均分成2份，取其中的1份。</p>
+                                    <div class="mt-3 pt-3 border-t border-green-200">
+                                        <p class="text-sm text-muted">
+                                            <i class="fa fa-lightbulb-o text-yellow-500 mr-1"></i>
+                                            相关知识点：分数的基本性质、分数的加减法
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <img src="https://p3-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/4b6d4486489b4d0d99443166b90c05c8~tplv-a9rns2rl98-image.image?lk3s=8e244e95&rcl=20260305113710F3130808572EA348C294&rrcfp=f06b921b&x-expires=1775273872&x-signature=Nwoo4ehM49axFwY07N4E4obGYR0%3D" alt="AI助手" class="w-48 mx-auto rounded-full shadow-lg animate-float">
+                    </div>
+                    <div class="lg:w-1/2">
+                        <div class="bg-white rounded-xl shadow-lg p-6 md:p-8">
+                            <h3 class="text-2xl font-bold text-center mb-6">向AI助手提问</h3>
+                            <div class="mb-6">
+                                <label for="ai-question" class="block text-sm font-medium text-muted mb-2">输入你的数学问题：</label>
+                                <textarea id="ai-question" rows="4" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-accent resize-none" placeholder="例如：如何解一元二次方程？"></textarea>
+                            </div>
+                            <div class="flex justify-between items-center mb-6">
+                                <div class="flex items-center">
+                                    <input type="checkbox" id="show-steps" class="w-4 h-4 text-accent focus:ring-accent border-gray-300 rounded">
+                                    <label for="show-steps" class="ml-2 text-sm text-muted">显示详细解题步骤</label>
+                                </div>
+                                <div class="text-sm text-muted">
+                                    <i class="fa fa-info-circle mr-1"></i>
+                                    请输入清晰的数学问题
+                                </div>
+                            </div>
+                            <button id="ask-ai-btn" class="w-full btn-accent text-lg">
+                                <i class="fa fa-paper-plane mr-2"></i>发送问题
+                            </button>
+                            
+                            <!-- AI思考中动画 (默认隐藏) -->
+                            <div id="ai-thinking" class="mt-6 hidden">
+                                <div class="flex items-center justify-center p-4 bg-gray-50 rounded-lg">
+                                    <div class="flex space-x-2">
+                                        <div class="w-3 h-3 bg-accent rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                                        <div class="w-3 h-3 bg-accent rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                                        <div class="w-3 h-3 bg-accent rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                                    </div>
+                                    <span class="ml-3 text-muted">AI助手正在思考中...</span>
+                                </div>
+                            </div>
+                            
+                            <!-- AI回答区域 (默认隐藏) -->
+                            <div id="ai-answer" class="mt-6 hidden">
+                                <div class="border-t border-gray-200 pt-4">
+                                    <h4 class="font-bold mb-3 flex items-center">
+                                        <i class="fa fa-robot text-accent mr-2"></i>
+                                        AI助手的回答
+                                    </h4>
+                                    <div id="answer-content" class="bg-green-50 rounded-lg p-4">
+                                        <!-- 回答内容将通过JavaScript动态插入 -->
+                                    </div>
+                                    <div class="mt-4 flex justify-between">
+                                        <div class="flex space-x-2">
+                                            <button class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-sm transition-colors">
+                                                <i class="fa fa-thumbs-up mr-1"></i> 有用
+                                            </button>
+                                            <button class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-sm transition-colors">
+                                                <i class="fa fa-thumbs-down mr-1"></i> 没用
+                                            </button>
+                                        </div>
+                                        <button class="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-primary rounded-full text-sm transition-colors">
+                                            <i class="fa fa-share-alt mr-1"></i> 分享
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 学习进度区域 -->
+        <section id="progress" class="py-15 bg-white">
+            <div class="container mx-auto px-4">
+                <div class="text-center mb-12">
+                    <h2 class="text-3xl font-bold text-primary mb-4">学习进度</h2>
+                    <p class="text-muted max-w-2xl mx-auto">
+                        追踪你的学习进度，了解自己的优势和不足，让学习更有效率。
+                    </p>
+                </div>
+                
+                <div class="bg-white rounded-xl shadow-lg p-6 md:p-8 max-w-4xl mx-auto">
+                    <div class="flex flex-col md:flex-row items-center justify-between mb-8">
+                        <div class="mb-6 md:mb-0">
+                            <h3 class="text-2xl font-bold mb-2">你的学习概览</h3>
+                            <p class="text-muted">继续努力，你已经完成了一年级数学课程的35%！</p>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <div class="text-center">
+                                <div class="text-3xl font-bold text-primary">35%</div>
+                                <div class="text-sm text-muted">总体进度</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-3xl font-bold text-secondary">12</div>
+                                <div class="text-sm text-muted">已学知识点</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-3xl font-bold text-accent">8</div>
+                                <div class="text-sm text-muted">完成游戏</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 进度条 -->
+                    <div class="mb-8">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-medium">一年级数学课程进度</span>
+                            <span class="text-sm text-muted">35%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-4">
+                            <div class="bg-primary h-4 rounded-full" style="width: 35%"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 知识点掌握情况 -->
+                    <div class="mb-8">
+                        <h4 class="font-bold mb-4">知识点掌握情况</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-sm">10以内的加减法</span>
+                                    <span class="text-sm text-muted">90%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div class="bg-green-500 h-2.5 rounded-full" style="width: 90%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-sm">认识数字</span>
+                                    <span class="text-sm text-muted">85%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div class="bg-green-500 h-2.5 rounded-full" style="width: 85%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-sm">认识图形</span>
+                                    <span class="text-sm text-muted">60%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div class="bg-yellow-500 h-2.5 rounded-full" style="width: 60%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-sm">20以内的加减法</span>
+                                    <span class="text-sm text-muted">45%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div class="bg-red-500 h-2.5 rounded-full" style="width: 45%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 学习建议 -->
+                    <div class="bg-blue-50 rounded-lg p-4">
+                        <h4 class="font-bold mb-2 flex items-center">
+                            <i class="fa fa-lightbulb-o text-yellow-500 mr-2"></i>
+                            AI学习建议
+                        </h4>
+                        <p class="text-sm">
+                            根据你的学习情况，建议你加强"20以内的加减法"的练习，可以通过"算术挑战"游戏来提高计算速度和准确性。同时，"认识图形"的概念也需要进一步巩固。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 注册/登录区域 -->
+        <section class="py-15 bg-gradient-to-r from-blue-500 to-blue-700 text-white">
+            <div class="container mx-auto px-4 text-center">
+                <h2 class="text-3xl font-bold mb-6">加入数学乐园，开启数学学习之旅！</h2>
+                <p class="text-xl mb-8 max-w-2xl mx-auto">
+                    注册账号，享受个性化学习体验，追踪学习进度，获得AI助手的专属指导。
+                </p>
+                <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
+                    <button class="bg-white text-primary hover:bg-gray-100 font-bold py-3 px-8 rounded-full shadow-lg transition-all duration-300 hover:shadow-xl transform hover:-translate-y-0.5 text-lg">
+                        <i class="fa fa-user-plus mr-2"></i>免费注册
+                    </button>
+                    <button class="bg-transparent border-2 border-white text-white hover:bg-white hover:text-primary font-bold py-3 px-8 rounded-full shadow-lg transition-all duration-300 hover:shadow-xl transform hover:-translate-y-0.5 text-lg">
+                        <i class="fa fa-user-circle mr-2"></i>登录
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-gray-800 text-white py-10">
+        <div class="container mx-auto px-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <div>
+                    <h3 class="text-xl font-bold mb-4">数学乐园</h3>
+                    <p class="text-gray-400">
+                        让数学学习变得有趣而简单，帮助小学生轻松掌握数学知识。
+                    </p>
+                    <div class="flex space-x-4 mt-4">
+                        <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                            <i class="fa fa-weixin text-xl"></i>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                            <i class="fa fa-weibo text-xl"></i>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                            <i class="fa fa-qq text-xl"></i>
+                        </a>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold mb-4">快速链接</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#home" class="text-gray-400 hover:text-white transition-colors">首页</a></li>
+                        <li><a href="#learning" class="text-gray-400 hover:text-white transition-colors">知识点学习</a></li>
+                        <li><a href="#games" class="text-gray-400 hover:text-white transition-colors">趣味游戏</a></li>
+                        <li><a href="#ai-qa" class="text-gray-400 hover:text-white transition-colors">AI问答</a></li>
+                        <li><a href="#progress" class="text-gray-400 hover:text-white transition-colors">学习进度</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold mb-4">帮助中心</h3>
+                    <ul class="space-y-2">
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">常见问题</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">使用指南</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">联系我们</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">隐私政策</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">用户协议</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold mb-4">联系方式</h3>
+                    <ul class="space-y-2 text-gray-400">
+                        <li class="flex items-center">
+                            <i class="fa fa-envelope mr-2"></i>
+                            <span>contact@mathfun.com</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fa fa-phone mr-2"></i>
+                            <span>400-123-4567</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fa fa-map-marker mr-2"></i>
+                            <span>北京市海淀区中关村科技园</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-gray-700 mt-8 pt-8 text-center text-gray-400">
+                <p>&copy; 2023 数学乐园 - 小学生数学学习平台. 保留所有权利.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script>
+        // 移动端菜单切换
+        document.addEventListener('DOMContentLoaded', function() {
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            
+            mobileMenuButton.addEventListener('click', function() {
+                mobileMenu.classList.toggle('hidden');
+            });
+            
+            // 点击移动端菜单项后关闭菜单
+            const mobileMenuItems = mobileMenu.querySelectorAll('a');
+            mobileMenuItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    mobileMenu.classList.add('hidden');
+                });
+            });
+            
+            // 年级选择按钮
+            const gradeButtons = document.querySelectorAll('.grade-btn');
+            gradeButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    gradeButtons.forEach(btn => {
+                        btn.classList.remove('active', 'btn-primary');
+                        btn.classList.add('bg-white', 'text-primary', 'hover:bg-primary', 'hover:text-white');
+                    });
+                    this.classList.add('active', 'btn-primary');
+                    this.classList.remove('bg-white', 'text-primary', 'hover:bg-primary', 'hover:text-white');
+                });
+            });
+            
+            // AI问答功能
+            const askAiBtn = document.getElementById('ask-ai-btn');
+            const aiThinking = document.getElementById('ai-thinking');
+            const aiAnswer = document.getElementById('ai-answer');
+            const answerContent = document.getElementById('answer-content');
+            const aiQuestion = document.getElementById('ai-question');
+            
+            askAiBtn.addEventListener('click', function() {
+                const question = aiQuestion.value.trim();
+                if (question) {
+                    // 显示AI思考中动画
+                    aiThinking.classList.remove('hidden');
+                    askAiBtn.disabled = true;
+                    
+                    // 模拟AI回答延迟
+                    setTimeout(() => {
+                        // 隐藏思考动画，显示回答
+                        aiThinking.classList.add('hidden');
+                        aiAnswer.classList.remove('hidden');
+                        askAiBtn.disabled = false;
+                        
+                        // 根据问题生成回答
+                        let answer = '';
+                        if (question.includes('分数')) {
+                            answer = `
+                                <p class="mb-2"><strong>分数</strong>是表示一个数是另一个数的几分之几的数。</p>
+                                <p class="mb-2">分数由两部分组成：</p>
+                                <ul class="list-disc pl-5 mb-2">
+                                    <li><strong>分子</strong>：写在上面的数，表示取了多少份</li>
+                                    <li><strong>分母</strong>：写在下面的数，表示把一个整体平均分成多少份</li>
+                                </ul>
+                                <p>例如，1/2表示把一个整体平均分成2份，取其中的1份。</p>
+                                <div class="mt-3 pt-3 border-t border-green-200">
+                                    <p class="text-sm text-muted">
+                                        <i class="fa fa-lightbulb-o text-yellow-500 mr-1"></i>
+                                        相关知识点：分数的基本性质、分数的加减法
+                                    </p>
+                                </div>
+                            `;
+                        } else if (question.includes('方程') || question.includes('一元二次')) {
+                            answer = `
+                                <p class="mb-2"><strong>一元二次方程</strong>是含有一个未知数，且未知数的最高次数是2的方程。</p>
+                                <p class="mb-2">一般形式为：ax² + bx + c = 0（其中a≠0）</p>
+                                <p class="mb-2">解一元二次方程的常用方法：</p>
+                                <ol class="list-decimal pl-5 mb-2">
+                                    <li><strong>公式法</strong>：x = (-b ± √(b² - 4ac)) / 2a</li>
+                                    <li><strong>因式分解法</strong>：将方程分解为两个一次因式的乘积</li>
+                                    <li><strong>配方法</strong>：将方程变形为完全平方形式</li>
+                                </ol>
+                                <p class="mb-2">例如，解方程：x² - 5x + 6 = 0</p>
+                                <p>使用公式法：a=1, b=-5, c=6</p>
+                                <p>Δ = b² - 4ac = (-5)² - 4×1×6 = 25 - 24 = 1</p>
+                                <p>x = (5 ± √1) / 2 = (5 ± 1) / 2</p>
+                                <p>所以，x₁ = 3, x₂ = 2</p>
+                                <div class="mt-3 pt-3 border-t border-green-200">
+                                    <p class="text-sm text-muted">
+                                        <i class="fa fa-lightbulb-o text-yellow-500 mr-1"></i>
+                                        相关知识点：一元一次方程、二次函数
+                                    </p>
+                                </div>
+                            `;
+                        } else if (question.includes('几何') || question.includes('图形')) {
+                            answer = `
+                                <p class="mb-2"><strong>几何学</strong>是研究空间形状、大小、位置关系的数学分支。</p>
+                                <p class="mb-2">基本几何图形包括：</p>
+                                <ul class="list-disc pl-5 mb-2">
+                                    <li><strong>点</strong>：没有大小，只有位置</li>
+                                    <li><strong>线</strong>：没有宽度，只有长度，分为直线、射线和线段</li>
+                                    <li><strong>面</strong>：没有厚度，只有长度和宽度</li>
+                                    <li><strong>体</strong>：有长度、宽度和高度</li>
+                                </ul>
+                                <p class="mb-2">常见平面图形：</p>
+                                <ul class="list-disc pl-5 mb-2">
+                                    <li><strong>三角形</strong>：由三条线段组成的封闭图形</li>
+                                    <li><strong>四边形</strong>：由四条线段组成的封闭图形，如正方形、长方形、平行四边形等</li>
+                                    <li><strong>圆形</strong>：平面上到定点距离等于定长的点的集合</li>
+                                </ul>
+                                <div class="mt-3 pt-3 border-t border-green-200">
+                                    <p class="text-sm text-muted">
+                                        <i class="fa fa-lightbulb-o text-yellow-500 mr-1"></i>
+                                        相关知识点：图形的周长和面积、立体图形
+                                    </p>
+                                </div>
+                            `;
+                        } else {
+                            answer = `
+                                <p class="mb-2">你好！我是数学AI助手，很高兴为你解答数学问题。</p>
+                                <p class="mb-2">你的问题是：<strong>${question}</strong></p>
+                                <p class="mb-2">这是一个很好的问题！让我来为你解答：</p>
+                                <p class="mb-2">数学是一门研究数量、结构、变化以及空间等概念的学科，它在我们的日常生活中无处不在。</p>
+                                <p class="mb-2">如果你有具体的数学问题，请告诉我，我会为你提供详细的解答和解题思路。</p>
+                                <div class="mt-3 pt-3 border-t border-green-200">
+                                    <p class="text-sm text-muted">
+                                        <i class="fa fa-lightbulb-o text-yellow-500 mr-1"></i>
+                                        提示：你可以问我关于算术、代数、几何等方面的具体问题
+                                    </p>
+                                </div>
+                            `;
+                        }
+                        
+                        answerContent.innerHTML = answer;
+                    }, 2000);
+                } else {
+                    alert('请输入你的数学问题！');
+                }
+            });
+            
+            // 平滑滚动
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href');
+                    const targetElement = document.querySelector(targetId);
+                    
+                    if (targetElement) {
+                        window.scrollTo({
+                            top: targetElement.offsetTop - 80,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
