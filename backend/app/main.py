@@ -7,7 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app.llm_service import generate_answer, generate_lesson_assets
+from app.animation_game_service import generate_animation_game
+from app.llm_service import (
+    generate_answer,
+    generate_lesson_assets,
+    generate_ppt_outline,
+    generate_video_script,
+)
 from app.ppt_service import build_pptx_file
 
 load_dotenv()
@@ -53,6 +59,21 @@ class GameAsset(BaseModel):
     reason: str
 
 
+class AnimationImageSource(BaseModel):
+    query: str
+    image_url: str
+    source_page: str
+    source_host: str
+
+
+class AnimationGameAsset(BaseModel):
+    title: str
+    summary: str
+    html: str
+    search_queries: list[str]
+    image_sources: list[AnimationImageSource]
+
+
 class LessonAssetsResponse(BaseModel):
     answer: str
     video: VideoAsset
@@ -85,6 +106,30 @@ def build_lesson_assets(payload: QARequest):
         raise HTTPException(status_code=400, detail="question cannot be empty")
     data = generate_lesson_assets(payload.grade, question)
     return LessonAssetsResponse(**data)
+
+
+@app.post("/api/video-script", response_model=VideoAsset)
+def build_video_script(payload: QARequest):
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="question cannot be empty")
+    return VideoAsset(**generate_video_script(payload.grade, question))
+
+
+@app.post("/api/ppt-outline", response_model=PPTAsset)
+def build_ppt_outline(payload: QARequest):
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="question cannot be empty")
+    return PPTAsset(**generate_ppt_outline(payload.grade, question))
+
+
+@app.post("/api/animation-game", response_model=AnimationGameAsset)
+def build_animation_game(payload: QARequest):
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="question cannot be empty")
+    return AnimationGameAsset(**generate_animation_game(payload.grade, question))
 
 
 @app.post("/api/pptx")

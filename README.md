@@ -25,10 +25,25 @@ copy .env.example .env
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+示例 `.env`（DashScope 兼容端点）：
+
+```dotenv
+OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=qwen3.5-plus
+OPENAI_BASE_URL=https://coding.dashscope.aliyuncs.com/v1
+
+ANTHROPIC_API_KEY=your_key_here
+ANTHROPIC_AUTH_TOKEN=your_key_here
+ANTHROPIC_MODEL=qwen3.5-plus
+ANTHROPIC_BASE_URL=https://coding.dashscope.aliyuncs.com/apps/anthropic
+```
+
 说明：
 
 - 不配置 `OPENAI_API_KEY` 也能运行，系统会使用内置降级模板。
 - 配置后会通过 `LangChain + ChatOpenAI` 生成更完整内容。
+- 当前后端代码只读取 `OPENAI_*`，所以运行本项目时至少需要 `OPENAI_API_KEY`、`OPENAI_MODEL`、`OPENAI_BASE_URL`。
+- `ANTHROPIC_*` 变量已写入示例配置，供 Claude Code、Anthropic SDK 或其他兼容工具使用，但当前仓库代码不会直接读取它们。
 
 ## 启动前端
 
@@ -94,3 +109,7 @@ npm run dev
 ### `POST /api/pptx`
 
 将 `lesson-assets` 返回的 `ppt` 结构导出为真实 `.pptx` 文件（二进制下载）。
+
+## 架构图
+
+- [飞象老师式工作流技术架构图](./docs/feixiang_workflow_architecture.md)
