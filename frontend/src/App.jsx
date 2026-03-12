@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import AssetLoadingCard from './components/AssetLoadingCard'
+import AnswerMarkdown from './components/AnswerMarkdown'
 import PreviewPage from './components/PreviewPage'
 import ThinkingCard from './components/ThinkingCard'
 import './App.css'
@@ -494,7 +495,7 @@ function App() {
                         <span className="section-tag">讲解答案</span>
                         <h3>适合直接讲给学生听</h3>
                       </div>
-                      <p className="answer-text">{activeConversation.answer}</p>
+                      <AnswerMarkdown content={activeConversation.answer} />
                     </article>
 
                     <article className="content-card material-card">

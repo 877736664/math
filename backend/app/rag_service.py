@@ -334,31 +334,39 @@ def solve_question_with_docs(question: str, documents: list[KnowledgeDocument]) 
 
 
 def build_rag_fallback_answer(grade: int, question: str, documents: list[KnowledgeDocument]) -> str:
-    document_titles = "、".join(document.title for document in documents)
+    document_titles = "\n".join(f"- {document.title}" for document in documents)
     solution = solve_question_with_docs(question, documents)
 
     if solution:
         steps = "\n".join(f"{index}. {step}" for index, step in enumerate(solution["steps"], start=1))
         return (
-            f"已检索知识点：{document_titles}\n\n"
-            f"结论：{solution['conclusion']}\n\n"
-            f"解题步骤：\n{steps}\n\n"
-            f"同类练习：{solution['practice']}"
+            "## 已检索知识点\n"
+            f"{document_titles}\n\n"
+            "## 结论\n"
+            f"{solution['conclusion']}\n\n"
+            "## 解题步骤\n"
+            f"{steps}\n\n"
+            "## 同类练习\n"
+            f"{solution['practice']}"
         )
 
     summaries = "\n".join(
         f"- {document.title}：{document.summary}" for document in documents
     )
     return (
-        f"已检索知识点：{document_titles}\n\n"
-        f"结论：这道题建议先按小学{grade}年级的应用题方法拆题，再决定具体算法。\n\n"
-        f"可参考的知识摘要：\n{summaries}\n\n"
-        "解题步骤：\n"
+        "## 已检索知识点\n"
+        f"{document_titles}\n\n"
+        "## 结论\n"
+        f"这道题建议先按小学{grade}年级的应用题方法拆题，再决定具体算法。\n\n"
+        "## 可参考的知识摘要\n"
+        f"{summaries}\n\n"
+        "## 解题步骤\n"
         "1. 先圈出题目中的数字、单位和关键词。\n"
         "2. 根据关键词判断是加法、减法、乘法、除法还是图形公式。\n"
         "3. 按检索到的知识点列式并计算。\n"
         "4. 把结果代回原题检查是否合理。\n\n"
-        f"同类练习：{_pick_practice_question(documents)}"
+        "## 同类练习\n"
+        f"{_pick_practice_question(documents)}"
     )
 
 
