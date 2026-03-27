@@ -1,13 +1,15 @@
+// 预览页负责单独展示视频、动画和 PPT 三类已生成素材。
+
 import { useState } from 'react'
 
 import { loadStoredHistory } from '../lib/chatStorage'
 import {
-  buildVideoScriptText,
+  downloadTeachingVideo,
   downloadAnimationHtml,
   downloadPptFile,
-  sanitizeFileName,
-  triggerTextDownload,
 } from '../lib/materialFiles'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8000`
 
 function getStoryboardTitle(step, index) {
   const text = String(step || '').trim()
@@ -57,6 +59,7 @@ function getStoryboardCue(index, total) {
 }
 
 function PreviewPage({ previewType, previewId }) {
+  // 预览页直接从本地历史中取素材，避免重复请求主对话接口。
   const [history] = useState(loadStoredHistory)
   const [downloadState, setDownloadState] = useState({
     busy: false,
@@ -96,24 +99,23 @@ function PreviewPage({ previewType, previewId }) {
   const slides = conversation?.ppt?.slides || []
   const clampedSlideIndex = Math.min(currentSlideIndex, Math.max(slides.length - 1, 0))
   const currentSlide = slides[clampedSlideIndex] || null
-  const storyboardCards = (conversation?.video?.scriptSteps || []).map((step, index, allSteps) => ({
+  const storyboardCards = (conversation?.video?.scenes || []).map((scene, index, allSteps) => ({
     id: `${conversation.id}-story-${index}`,
     stepNumber: index + 1,
     phase: getStoryboardPhase(index, allSteps.length),
-    title: getStoryboardTitle(step, index),
-    body: step,
+    title: scene?.title || getStoryboardTitle(scene?.narration, index),
+    body: scene?.narration || '',
     cue: getStoryboardCue(index, allSteps.length),
+    duration: Math.round(Number(scene?.duration_seconds || 0)),
   }))
 
   const downloadMaterial = async () => {
+    // 不同素材走不同下载逻辑，但这里统一做交互状态管理。
     setDownloadState({ busy: true, error: '' })
 
     try {
       if (isVideoPreview) {
-        triggerTextDownload(
-          `${sanitizeFileName(conversation.video.title, '视频脚本')}.md`,
-          buildVideoScriptText(conversation),
-        )
+        await downloadTeachingVideo(conversation)
       } else if (isAnimationPreview) {
         downloadAnimationHtml(conversation)
       } else {
@@ -135,13 +137,13 @@ function PreviewPage({ previewType, previewId }) {
         <header className="preview-header">
           <div>
             <p className="preview-kicker">
-              {isVideoPreview ? '视频脚本预览' : isAnimationPreview ? '数字动画游戏预览' : 'PPT 提纲预览'}
+              {isVideoPreview ? '教学视频预览' : isAnimationPreview ? '互动动画演示预览' : 'PPT 提纲预览'}
             </p>
             <h1>
               {isVideoPreview
-                ? conversation.video.title || '视频脚本'
+                ? conversation.video.title || '教学视频'
                 : isAnimationPreview
-                  ? conversation.animationGame.title || '数字动画游戏'
+                  ? conversation.animationGame.title || '互动动画演示'
                   : conversation.ppt.title || 'PPT 提纲'}
             </h1>
             <p className="preview-question">原问题：{conversation.question}</p>
@@ -163,7 +165,7 @@ function PreviewPage({ previewType, previewId }) {
                 {downloadState.busy
                   ? '准备下载中…'
                   : isVideoPreview
-                    ? '下载脚本文件'
+                    ? '下载 .mp4'
                     : isAnimationPreview
                       ? '下载 .html'
                       : '下载 .pptx'}
@@ -183,12 +185,21 @@ function PreviewPage({ previewType, previewId }) {
           <section className="preview-document preview-document--storyboard">
             <div className="preview-storyboard-head">
               <div className="preview-storyboard-stat">
-                <strong>{storyboardCards.length}</strong>
-                <span>个分镜段落</span>
+                <strong>{Math.max(1, Math.round(conversation.video.durationSeconds || 0))}</strong>
+                <span>秒视频时长</span>
               </div>
               <p>
-                这份脚本已经改成适合老师讲解或录屏的分镜卡片。每张卡片都包含镜头阶段、核心文案和简单画面建议。
+                这是一段已经合成好的教学视频。当前版本使用可替换 TTS 占位音频通路，后续接入正式语音服务后即可升级为真实讲题配音。
               </p>
+            </div>
+
+            <div className="preview-video-player-shell">
+              <video
+                className="preview-video-player"
+                controls
+                preload="metadata"
+                src={`${API_BASE_URL}${conversation.video.downloadPath}`}
+              />
             </div>
 
             <div className="preview-storyboard-grid">
@@ -205,55 +216,40 @@ function PreviewPage({ previewType, previewId }) {
                   <div className="preview-shot-foot">
                     <span className="preview-shot-cue-label">镜头提示</span>
                     <p className="preview-shot-cue">{card.cue}</p>
+                    <p className="preview-shot-cue">建议时长：约 {Math.max(1, card.duration)} 秒</p>
                   </div>
                 </article>
               ))}
             </div>
+
+            {conversation.video.videoSpec ? (
+              <section className="preview-json-card">
+                <div className="section-head section-head--compact">
+                  <span className="section-tag">模板 JSON</span>
+                  <h3>这一版视频使用的结构化模板</h3>
+                </div>
+                <pre className="preview-json-block">
+                  {JSON.stringify(conversation.video.videoSpec, null, 2)}
+                </pre>
+              </section>
+            ) : null}
           </section>
         ) : isAnimationPreview ? (
           <section className="preview-animation">
             <div className="preview-animation-meta">
               <div className="preview-animation-card">
-                <span className="preview-animation-label">玩法说明</span>
+                <span className="preview-animation-label">课堂玩法</span>
                 <h2>{conversation.animationGame.summary || '点击按钮，按动画流程一步一步看。'}</h2>
                 <p>
-                  这份 HTML 已经包含动画流程、图片引用和互动答题。你可以直接在线试玩，也可以下载成单文件发给学生或老师。
+                  这份 HTML 是可交互动画演示页。老师可以现场点击开始、上一步、下一步、重播和显示答案，也可以下载成单文件直接带进课堂。
                 </p>
-              </div>
-
-              <div className="preview-animation-card">
-                <span className="preview-animation-label">自动搜图关键词</span>
-                <div className="preview-query-list">
-                  {(conversation.animationGame.searchQueries || []).map((query) => (
-                    <span key={`${conversation.id}-${query}`} className="preview-query-chip">
-                      {query}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="preview-animation-card">
-                <span className="preview-animation-label">图片来源</span>
-                <ul className="preview-animation-sources">
-                  {(conversation.animationGame.imageSources || []).map((source, index) => (
-                    <li key={`${conversation.id}-image-source-${index}`}>
-                      {source.source_page ? (
-                        <a href={source.source_page} target="_blank" rel="noreferrer">
-                          {source.source_host || source.query || '图片来源'}
-                        </a>
-                      ) : (
-                        <span>{source.source_host || source.query || '内置 SVG'}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
               </div>
             </div>
 
             <div className="preview-animation-stage">
               <iframe
                 className="preview-animation-frame"
-                title={conversation.animationGame.title || '数字动画游戏'}
+                title={conversation.animationGame.title || '互动动画演示'}
                 sandbox="allow-scripts"
                 srcDoc={conversation.animationGame.html}
               />

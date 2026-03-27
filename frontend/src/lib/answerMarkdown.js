@@ -1,3 +1,5 @@
+// 把后端可能返回的普通文本答案整理成更稳定的 Markdown 结构。
+
 const SECTION_TITLES = new Set(['已检索知识点', '结论', '解题步骤', '可参考的知识摘要', '同类练习'])
 
 function looksLikeMarkdown(text) {
@@ -12,6 +14,7 @@ function normalizeListItems(value) {
 }
 
 export function normalizeAnswerMarkdown(answer) {
+  // 如果内容本身已经是 Markdown，就直接透传；否则尝试补出标题和列表结构。
   const text = String(answer || '')
     .replace(/\r\n?/g, '\n')
     .trim()

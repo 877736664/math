@@ -1,3 +1,5 @@
+// 问答接口处理中展示的占位卡片。
+
 function ThinkingCard() {
   return (
     <section className="thinking-card" aria-live="polite">
@@ -14,7 +16,7 @@ function ThinkingCard() {
       <div className="thinking-copy">
         <p className="thinking-title">我先把讲解答案理清楚</p>
         <p className="thinking-text">
-          先给出适合课堂讲解的答案。等答案准备好之后，你可以再决定要不要生成视频脚本或 PPT 提纲。
+          先给出适合课堂讲解的答案。等答案准备好之后，你可以再决定要不要生成教学视频或 PPT 提纲。
         </p>
         <div className="thinking-dots" aria-hidden="true">
           <span />

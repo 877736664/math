@@ -2,7 +2,7 @@
 
 当前仓库结构：
 
-- `backend`：Python + FastAPI + LangChain
+- `backend`：Python + FastAPI + LangChain + LangGraph
 - `frontend`：Vite + React
 
 ## 功能
@@ -41,9 +41,24 @@ ANTHROPIC_BASE_URL=https://coding.dashscope.aliyuncs.com/apps/anthropic
 说明：
 
 - 不配置 `OPENAI_API_KEY` 也能运行，系统会使用内置降级模板。
-- 配置后会通过 `LangChain + ChatOpenAI` 生成更完整内容。
+- 配置后会通过 `LangChain + ChatOpenAI` 生成更完整内容，并由 `LangGraph` 统一编排问答与素材工作流。
 - 当前后端代码只读取 `OPENAI_*`，所以运行本项目时至少需要 `OPENAI_API_KEY`、`OPENAI_MODEL`、`OPENAI_BASE_URL`。
 - `ANTHROPIC_*` 变量已写入示例配置，供 Claude Code、Anthropic SDK 或其他兼容工具使用，但当前仓库代码不会直接读取它们。
+
+### 接入 RAGFlow 检索
+
+项目已移除内置本地知识库，后端现在只走 RAGFlow 检索。请在 `backend/.env` 中补充：
+
+```dotenv
+RAGFLOW_BASE_URL=http://192.168.2.224
+RAGFLOW_API_KEY=your_ragflow_api_key
+RAGFLOW_DATASET_IDS=dataset_id_1,dataset_id_2
+```
+
+说明：
+
+- 当前接的是 RAGFlow HTTP API 的 `POST /api/v1/retrieval`，需要有效的 `API key` 和 `dataset_ids`。
+- 如果 RAGFlow 没有返回有效片段，后端会返回占位知识点，方便排查 `API key`、`dataset_ids` 或数据集内容是否正确。
 
 ## 启动前端
 

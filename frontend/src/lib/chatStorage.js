@@ -1,9 +1,149 @@
-export const HISTORY_STORAGE_KEY = 'math-ai-chat-history-v3'
+// 对话历史、本地存储和前后端数据结构兼容逻辑都集中在这里。
+
+export const HISTORY_STORAGE_KEY = 'math-ai-chat-history-v4'
 export const MAX_HISTORY_ITEMS = 24
+const TERTIARY_LEGACY_HISTORY_STORAGE_KEY = 'math-ai-chat-history-v3'
 const SECONDARY_LEGACY_HISTORY_STORAGE_KEY = 'math-ai-chat-history-v2'
 const LEGACY_HISTORY_STORAGE_KEY = 'math-ai-chat-history-v1'
+const DEFAULT_GRADE = 3
+const DEFAULT_SEMESTER = '下册'
+const DEFAULT_TEXTBOOK_LABEL = '人教版小学数学'
+
+function normalizeMode(value) {
+  if (value === '轻快') {
+    return '简洁'
+  }
+
+  if (value === '深入') {
+    return '详细'
+  }
+
+  return value === '简洁' || value === '标准' || value === '详细' ? value : '标准'
+}
+
+export function createDefaultTextbookState(grade = DEFAULT_GRADE, semester = DEFAULT_SEMESTER) {
+  // 在后端尚未返回教材信息时，先给前端一个稳定的默认教材范围。
+  return {
+    edition: 'rjb',
+    editionLabel: '人教版',
+    subject: 'math',
+    subjectLabel: '数学',
+    publisher: '人民教育出版社',
+    grade,
+    semester,
+    label: `${DEFAULT_TEXTBOOK_LABEL}·${grade}年级${semester}`,
+    sourceLabel: '电子课本网',
+    sourceUrl: '',
+  }
+}
+
+function normalizeTextbookState(item, grade = DEFAULT_GRADE, semester = DEFAULT_SEMESTER) {
+  const fallback = createDefaultTextbookState(grade, semester)
+
+  if (!item || typeof item !== 'object') {
+    return fallback
+  }
+
+  const parsedGrade = Number(item.grade)
+
+  return {
+    edition: typeof item.edition === 'string' ? item.edition : fallback.edition,
+    editionLabel: typeof item.edition_label === 'string' ? item.edition_label : fallback.editionLabel,
+    subject: typeof item.subject === 'string' ? item.subject : fallback.subject,
+    subjectLabel: typeof item.subject_label === 'string' ? item.subject_label : fallback.subjectLabel,
+    publisher: typeof item.publisher === 'string' ? item.publisher : fallback.publisher,
+    grade: Number.isInteger(parsedGrade) && parsedGrade >= 1 && parsedGrade <= 6 ? parsedGrade : grade,
+    semester: item.semester === '上册' || item.semester === '下册' ? item.semester : semester,
+    label: typeof item.label === 'string' && item.label ? item.label : fallback.label,
+    sourceLabel: typeof item.source_label === 'string' ? item.source_label : fallback.sourceLabel,
+    sourceUrl: typeof item.source_url === 'string' ? item.source_url : fallback.sourceUrl,
+  }
+}
+
+function normalizeKnowledgePoints(items) {
+  // 把后端返回的知识点字段统一成前端内部使用的驼峰结构。
+  if (!Array.isArray(items)) {
+    return []
+  }
+
+  return items.map((item, index) => ({
+    docId: typeof item?.doc_id === 'string' ? item.doc_id : `knowledge-${index}`,
+    title: typeof item?.title === 'string' ? item.title : '未命名知识点',
+    unitTitle: typeof item?.unit_title === 'string' ? item.unit_title : '',
+    curriculumLabel: typeof item?.curriculum_label === 'string' ? item.curriculum_label : '',
+    summary: typeof item?.summary === 'string' ? item.summary : '',
+    example: typeof item?.example === 'string' ? item.example : '',
+    conceptTags: Array.isArray(item?.concept_tags) ? item.concept_tags.map((tag) => String(tag)) : [],
+    sourceLabel: typeof item?.source_label === 'string' ? item.source_label : '',
+    sourceUrl: typeof item?.source_url === 'string' ? item.source_url : '',
+  }))
+}
+
+function normalizeTurns(items, fallbackQuestion, fallbackAnswer, fallbackStatus, fallbackError, createdAt, updatedAt) {
+  if (Array.isArray(items) && items.length) {
+    return items
+      .map((item, index) => {
+        const role = item?.role === 'assistant' ? 'assistant' : 'user'
+        const status =
+          item?.status === 'loading' || item?.status === 'error' || item?.status === 'done'
+            ? item.status
+            : role === 'assistant'
+              ? 'done'
+              : 'done'
+
+        return {
+          id: typeof item?.id === 'string' ? item.id : `turn-${index}`,
+          role,
+          content: typeof item?.content === 'string' ? item.content : '',
+          status,
+          createdAt: typeof item?.createdAt === 'string' ? item.createdAt : role === 'assistant' ? updatedAt : createdAt,
+        }
+      })
+      .filter((item) => item.content || item.status === 'loading' || item.status === 'error')
+  }
+
+  const turns = []
+  if (fallbackQuestion) {
+    turns.push({
+      id: 'turn-user-initial',
+      role: 'user',
+      content: fallbackQuestion,
+      status: 'done',
+      createdAt,
+    })
+  }
+
+  if (fallbackStatus === 'loading') {
+    turns.push({
+      id: 'turn-assistant-loading',
+      role: 'assistant',
+      content: '',
+      status: 'loading',
+      createdAt: updatedAt,
+    })
+  } else if (fallbackStatus === 'error') {
+    turns.push({
+      id: 'turn-assistant-error',
+      role: 'assistant',
+      content: typeof fallbackError === 'string' ? fallbackError : '请求失败，请稍后重试。',
+      status: 'error',
+      createdAt: updatedAt,
+    })
+  } else if (fallbackAnswer) {
+    turns.push({
+      id: 'turn-assistant-answer',
+      role: 'assistant',
+      content: fallbackAnswer,
+      status: 'done',
+      createdAt: updatedAt,
+    })
+  }
+
+  return turns
+}
 
 export function createConversationId() {
+  // 优先使用浏览器原生 UUID，回退时再用时间戳 + 随机串。
   if (typeof globalThis.crypto?.randomUUID === 'function') {
     return globalThis.crypto.randomUUID()
   }
@@ -15,7 +155,11 @@ export function createEmptyVideoState() {
   return {
     status: 'idle',
     title: '',
-    scriptSteps: [],
+    summary: '',
+    downloadPath: '',
+    durationSeconds: 0,
+    videoSpec: null,
+    scenes: [],
     error: '',
     updatedAt: '',
   }
@@ -37,8 +181,7 @@ export function createEmptyAnimationGameState() {
     title: '',
     summary: '',
     html: '',
-    searchQueries: [],
-    imageSources: [],
+    demoSpec: null,
     error: '',
     updatedAt: '',
   }
@@ -53,8 +196,18 @@ function normalizeVideoState(item) {
     return {
       status: item.status,
       title: typeof item.title === 'string' ? item.title : '',
-      scriptSteps: Array.isArray(item.scriptSteps)
-        ? item.scriptSteps.map((step) => String(step))
+      summary: typeof item.summary === 'string' ? item.summary : '',
+      downloadPath: typeof item.downloadPath === 'string' ? item.downloadPath : '',
+      durationSeconds: Number.isFinite(Number(item.durationSeconds)) ? Number(item.durationSeconds) : 0,
+      videoSpec: item.videoSpec && typeof item.videoSpec === 'object' ? item.videoSpec : null,
+      scenes: Array.isArray(item.scenes)
+        ? item.scenes.map((scene, index) => ({
+            title: typeof scene?.title === 'string' ? scene.title : `镜头 ${index + 1}`,
+            narration: typeof scene?.narration === 'string' ? scene.narration : '',
+            duration_seconds: Number.isFinite(Number(scene?.duration_seconds ?? scene?.durationSeconds))
+              ? Number(scene.duration_seconds ?? scene.durationSeconds)
+              : 0,
+          }))
         : [],
       error: typeof item.error === 'string' ? item.error : '',
       updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : '',
@@ -64,8 +217,16 @@ function normalizeVideoState(item) {
   return {
     status: 'done',
     title: typeof item.title === 'string' ? item.title : '',
-    scriptSteps: Array.isArray(item.script_steps)
-      ? item.script_steps.map((step) => String(step))
+    summary: typeof item.summary === 'string' ? item.summary : '',
+    downloadPath: typeof item.download_path === 'string' ? item.download_path : '',
+    durationSeconds: Number.isFinite(Number(item.duration_seconds)) ? Number(item.duration_seconds) : 0,
+    videoSpec: item.video_spec && typeof item.video_spec === 'object' ? item.video_spec : null,
+    scenes: Array.isArray(item.scenes)
+      ? item.scenes.map((scene, index) => ({
+          title: typeof scene?.title === 'string' ? scene.title : `镜头 ${index + 1}`,
+          narration: typeof scene?.narration === 'string' ? scene.narration : '',
+          duration_seconds: Number.isFinite(Number(scene?.duration_seconds)) ? Number(scene.duration_seconds) : 0,
+        }))
       : [],
     error: '',
     updatedAt: '',
@@ -121,17 +282,7 @@ function normalizeAnimationGameState(item) {
       title: typeof item.title === 'string' ? item.title : '',
       summary: typeof item.summary === 'string' ? item.summary : '',
       html: typeof item.html === 'string' ? item.html : '',
-      searchQueries: Array.isArray(item.searchQueries)
-        ? item.searchQueries.map((value) => String(value))
-        : [],
-      imageSources: Array.isArray(item.imageSources)
-        ? item.imageSources.map((source) => ({
-            query: typeof source?.query === 'string' ? source.query : '',
-            image_url: typeof source?.image_url === 'string' ? source.image_url : '',
-            source_page: typeof source?.source_page === 'string' ? source.source_page : '',
-            source_host: typeof source?.source_host === 'string' ? source.source_host : '',
-          }))
-        : [],
+      demoSpec: item.demoSpec && typeof item.demoSpec === 'object' ? item.demoSpec : null,
       error: typeof item.error === 'string' ? item.error : '',
       updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : '',
     }
@@ -142,23 +293,19 @@ function normalizeAnimationGameState(item) {
     title: typeof item.title === 'string' ? item.title : '',
     summary: typeof item.summary === 'string' ? item.summary : '',
     html: typeof item.html === 'string' ? item.html : '',
-    searchQueries: Array.isArray(item.search_queries)
-      ? item.search_queries.map((value) => String(value))
-      : [],
-    imageSources: Array.isArray(item.image_sources)
-      ? item.image_sources.map((source) => ({
-          query: typeof source?.query === 'string' ? source.query : '',
-          image_url: typeof source?.image_url === 'string' ? source.image_url : '',
-          source_page: typeof source?.source_page === 'string' ? source.source_page : '',
-          source_host: typeof source?.source_host === 'string' ? source.source_host : '',
-        }))
-      : [],
+    demoSpec: item.demo_spec && typeof item.demo_spec === 'object' ? item.demo_spec : null,
     error: '',
     updatedAt: '',
   }
 }
 
 export function normalizeConversation(item) {
+  // 统一兼容老版本历史记录、当前版本状态字段和后端 snake_case 响应。
+  const parsedGrade = Number(item?.grade)
+  const normalizedGrade = Number.isInteger(parsedGrade) && parsedGrade >= 1 && parsedGrade <= 6 ? parsedGrade : DEFAULT_GRADE
+  const normalizedSemester = item?.semester === '上册' || item?.semester === '下册' ? item.semester : DEFAULT_SEMESTER
+  const normalizedGradeMode = item?.gradeMode === 'auto' || item?.gradeMode === 'manual' ? item.gradeMode : 'manual'
+
   const answerStatus =
     typeof item?.answerStatus === 'string'
       ? item.answerStatus
@@ -168,10 +315,36 @@ export function normalizeConversation(item) {
           ? 'done'
           : 'idle'
 
+  const createdAt = typeof item?.createdAt === 'string' ? item.createdAt : new Date().toISOString()
+  const updatedAt =
+    typeof item?.updatedAt === 'string'
+      ? item.updatedAt
+      : typeof item?.createdAt === 'string'
+        ? item.createdAt
+        : new Date().toISOString()
+
   return {
     id: typeof item?.id === 'string' ? item.id : createConversationId(),
     question: typeof item?.question === 'string' ? item.question : '',
-    mode: typeof item?.mode === 'string' ? item.mode : '标准',
+    mode: normalizeMode(typeof item?.mode === 'string' ? item.mode : '标准'),
+    gradeMode: normalizedGradeMode,
+    grade: normalizedGrade,
+    semester: normalizedSemester,
+    turns: normalizeTurns(
+      item?.turns,
+      typeof item?.question === 'string' ? item.question : '',
+      typeof item?.answer === 'string' ? item.answer : '',
+      answerStatus,
+      typeof item?.answerError === 'string'
+        ? item.answerError
+        : item?.status === 'error' && typeof item?.error === 'string'
+          ? item.error
+          : '',
+      createdAt,
+      updatedAt,
+    ),
+    textbook: normalizeTextbookState(item?.textbook, normalizedGrade, normalizedSemester),
+    knowledgePoints: normalizeKnowledgePoints(item?.knowledgePoints ?? item?.knowledge_points),
     fileName: typeof item?.fileName === 'string' ? item.fileName : '',
     answerStatus,
     answer: typeof item?.answer === 'string' ? item.answer : '',
@@ -184,17 +357,13 @@ export function normalizeConversation(item) {
     video: normalizeVideoState(item?.video ?? item?.assets?.video),
     ppt: normalizePptState(item?.ppt ?? item?.assets?.ppt),
     animationGame: normalizeAnimationGameState(item?.animationGame),
-    createdAt: typeof item?.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
-    updatedAt:
-      typeof item?.updatedAt === 'string'
-        ? item.updatedAt
-        : typeof item?.createdAt === 'string'
-          ? item.createdAt
-          : new Date().toISOString(),
+    createdAt,
+    updatedAt,
   }
 }
 
 export function loadStoredHistory() {
+  // 读取当前版本和历史版本的缓存，尽量无感迁移旧数据。
   if (typeof window === 'undefined') {
     return []
   }
@@ -202,6 +371,7 @@ export function loadStoredHistory() {
   try {
     const raw =
       window.localStorage.getItem(HISTORY_STORAGE_KEY) ||
+      window.localStorage.getItem(TERTIARY_LEGACY_HISTORY_STORAGE_KEY) ||
       window.localStorage.getItem(SECONDARY_LEGACY_HISTORY_STORAGE_KEY) ||
       window.localStorage.getItem(LEGACY_HISTORY_STORAGE_KEY)
     if (!raw) {
@@ -223,6 +393,7 @@ export function loadStoredHistory() {
 }
 
 export function persistHistory(history) {
+  // 只保留最近 MAX_HISTORY_ITEMS 条，避免本地缓存无限增长。
   if (typeof window === 'undefined') {
     return
   }
@@ -239,6 +410,7 @@ export function clearStoredHistory() {
   }
 
   window.localStorage.removeItem(HISTORY_STORAGE_KEY)
+  window.localStorage.removeItem(TERTIARY_LEGACY_HISTORY_STORAGE_KEY)
   window.localStorage.removeItem(SECONDARY_LEGACY_HISTORY_STORAGE_KEY)
   window.localStorage.removeItem(LEGACY_HISTORY_STORAGE_KEY)
 }
@@ -278,7 +450,11 @@ export function getPreviewText(item) {
   }
 
   if (item.video.status === 'done' || item.ppt.status === 'done' || item.animationGame.status === 'done') {
-    return '已生成讲解答案，可继续预览视频脚本、PPT 提纲或动画游戏。'
+    if (item.animationGame.status === 'done' && !item.animationGame.demoSpec) {
+      return '互动动画是旧版本结果，请重新生成。'
+    }
+
+    return '已生成讲解答案，可继续预览教学视频、PPT 提纲或互动动画演示。'
   }
 
   if (!item.answer) {
@@ -306,6 +482,10 @@ export function getStatusLabel(item) {
   }
 
   if (item.video.status === 'done' || item.ppt.status === 'done' || item.animationGame.status === 'done') {
+    if (item.animationGame.status === 'done' && !item.animationGame.demoSpec) {
+      return '需要重生成'
+    }
+
     return '素材已生成'
   }
 
@@ -327,6 +507,10 @@ export function getStatusTone(item) {
   }
 
   if (item.video.status === 'done' || item.ppt.status === 'done' || item.animationGame.status === 'done') {
+    if (item.animationGame.status === 'done' && !item.animationGame.demoSpec) {
+      return 'error'
+    }
+
     return 'done'
   }
 
@@ -334,6 +518,7 @@ export function getStatusTone(item) {
 }
 
 export function getRouteState() {
+  // 主页面和预览页共用一个入口，所以需要从查询参数判断当前路由状态。
   if (typeof window === 'undefined') {
     return { previewType: '', previewId: '' }
   }
@@ -350,6 +535,7 @@ export function getRouteState() {
 }
 
 export function buildPreviewUrl(type, conversationId) {
+  // 用查询参数拼出预览页地址，方便新标签页直接打开对应素材。
   if (typeof window === 'undefined') {
     return ''
   }
