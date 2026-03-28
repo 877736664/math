@@ -16,7 +16,7 @@ from uuid import uuid4
 import imageio_ffmpeg
 from PIL import Image, ImageDraw, ImageFont
 
-from app.teaching_workflow_service import generate_video_script
+from app.workflows.teaching_workflow import generate_video_script
 
 
 VIDEO_WIDTH = 1280
@@ -54,10 +54,19 @@ def generate_teaching_video(
     question: str,
     textbook: dict | None = None,
     messages: list[dict] | None = None,
+    teaching_preferences: dict | None = None,
+    network_enabled: bool = False,
 ) -> dict:
     """生成教学视频文件，并返回下载路径与视频规格说明。"""
 
-    video_script = generate_video_script(grade, question, textbook=textbook, messages=messages)
+    video_script = generate_video_script(
+        grade,
+        question,
+        textbook=textbook,
+        messages=messages,
+        teaching_preferences=teaching_preferences,
+        network_enabled=network_enabled,
+    )
     script_steps = video_script.get("script_steps") or []
     title = str(video_script.get("title", "数学教学视频")).strip() or "数学教学视频"
     scenes = _build_video_scenes(title, question, script_steps)

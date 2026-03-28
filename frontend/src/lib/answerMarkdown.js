@@ -1,6 +1,16 @@
 // 把后端可能返回的普通文本答案整理成更稳定的 Markdown 结构。
 
-const SECTION_TITLES = new Set(['已检索知识点', '结论', '解题步骤', '可参考的知识摘要', '同类练习'])
+const SECTION_TITLES = new Set([
+  '已检索知识点',
+  '结论',
+  '为什么这样做',
+  '解题步骤',
+  '分步讲解',
+  '常见错误',
+  '课堂提问',
+  '可参考的知识摘要',
+  '同类练习',
+])
 
 function looksLikeMarkdown(text) {
   return /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|```)/.test(text)
@@ -121,4 +131,50 @@ export function normalizeAnswerMarkdown(answer) {
   flushList()
 
   return blocks.join('\n\n')
+}
+
+export function splitAnswerSections(answer) {
+  const markdown = normalizeAnswerMarkdown(answer)
+  if (!markdown) {
+    return []
+  }
+
+  const lines = markdown.split('\n')
+  const sections = []
+  let current = null
+
+  const pushCurrent = () => {
+    if (!current) {
+      return
+    }
+
+    sections.push({
+      title: current.title,
+      content: current.lines.join('\n').trim(),
+    })
+  }
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^##\s+(.+)$/)
+    if (headingMatch) {
+      pushCurrent()
+      current = {
+        title: headingMatch[1].trim(),
+        lines: [],
+      }
+      continue
+    }
+
+    if (!current) {
+      current = {
+        title: '讲解',
+        lines: [],
+      }
+    }
+
+    current.lines.push(line)
+  }
+
+  pushCurrent()
+  return sections.filter((section) => section.content)
 }

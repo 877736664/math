@@ -10,13 +10,14 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 
-from app.rag_service import (
+from app.services.rag_service import (
     build_rag_fallback_answer,
     build_rag_fallback_assets,
     render_retrieved_context,
     retrieve_knowledge,
 )
-from app.textbook_repository import resolve_textbook_scope, serialize_knowledge_points, serialize_textbook_scope
+from app.repositories.textbook_repository import resolve_textbook_scope, serialize_knowledge_points, serialize_textbook_scope
+from app.services.teaching_quality_service import answer_has_required_sections, build_teaching_quality_context
 
 
 GAME_CATALOG = [
@@ -38,6 +39,53 @@ GAME_CATALOG = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+def system_message(content: str) -> dict:
+    """为轻量级直接调用封装 system 消息。"""
+
+    return {"role": "system", "content": str(content or "").strip()}
+
+
+def user_message(content: str) -> dict:
+    """为轻量级直接调用封装 user 消息。"""
+
+    return {"role": "user", "content": str(content or "").strip()}
+
+
+def complete_with_llm(messages: list[dict], temperature: float = 0.2, max_tokens: int = 3200) -> str:
+    """直接调用兼容 OpenAI 的聊天模型并返回纯文本结果。"""
+
+    llm = _create_llm(
+        timeout=int(os.getenv("OPENAI_DIRECT_TIMEOUT", "90")),
+        max_tokens=max_tokens,
+        enable_thinking=_env_flag("OPENAI_DIRECT_ENABLE_THINKING", False),
+    )
+    if llm is None:
+        raise RuntimeError("LLM is not configured")
+
+    direct_messages: list[BaseMessage] = []
+    for item in messages:
+        role = item.get("role") if isinstance(item, dict) else None
+        content = str(item.get("content", "")).strip() if isinstance(item, dict) else ""
+        if not content:
+            continue
+        if role == "system":
+            direct_messages.append(HumanMessage(content=f"[SYSTEM]\n{content}"))
+        elif role == "assistant":
+            direct_messages.append(AIMessage(content=content))
+        else:
+            direct_messages.append(HumanMessage(content=content))
+
+    if not direct_messages:
+        return ""
+
+    bound_llm = llm.bind(temperature=temperature)
+    response = bound_llm.invoke(direct_messages)
+    content = response.content if hasattr(response, "content") else response
+    if isinstance(content, list):
+        return "\n".join(str(part.get("text", "")) if isinstance(part, dict) else str(part) for part in content).strip()
+    return str(content or "").strip()
 
 
 def build_history_messages(messages: list[dict] | None, latest_question: str) -> list[BaseMessage]:
@@ -135,15 +183,24 @@ def _build_qa_chain():
                     "1) 只使用简体中文；"
                     "2) 难度匹配{grade}年级；"
                     "3) 优先依据“检索知识”组织答案，不要脱离检索内容随意发挥；"
-                    "4) 先给结论，再分步骤讲解；"
-                    "5) 最后给1道同类型练习题，不带答案；"
-                    "6) 使用 Markdown 输出，至少包含“## 结论”“## 解题步骤”“## 同类练习”三个部分。"
+                    "4) 必须围绕教学目标组织讲解，并照顾学生基础；"
+                    "5) 保持老师讲题口吻，先讲为什么，再讲怎么算；"
+                    "6) 必须指出一个最容易出错的地方，并给出课堂追问；"
+                    "7) 最后给1道同类型练习题，不带答案；"
+                    "8) 使用 Markdown 输出，至少包含“## 结论”“## 为什么这样做”“## 分步讲解”“## 常见错误”“## 课堂提问”“## 同类练习”六个部分。"
                 ),
             ),
             MessagesPlaceholder("history"),
             (
                 "human",
-                "教材范围：{textbook_label}\n\n检索知识：\n{context}\n\n老师当前问题：{question}",
+                "教材范围：{textbook_label}\n"
+                "教学目标：{teaching_goal}\n"
+                "学生情况：{student_profile}\n"
+                "讲解风格：{teaching_style_instruction}\n"
+                "详略要求：{depth_instruction}\n"
+                "易错点提醒：{misconception_focus}\n"
+                "课堂追问建议：{teacher_prompt}\n\n"
+                "检索知识：\n{context}\n\n老师当前问题：{question}",
             ),
         ]
     )
@@ -187,16 +244,24 @@ def _build_assets_chain():
                     "要求："
                     "1) 内容必须基于检索知识；"
                     "2) 面向小学{grade}年级；"
-                    "3) video_script_steps 返回4-6条；"
-                    "4) ppt_slides 返回5-8页；"
-                    "5) 每页 bullet_points 返回2-4条短句；"
-                    "6) answer 字段使用 Markdown，至少包含“## 结论”“## 解题步骤”“## 同类练习”三个部分。"
+                    "3) answer 必须体现教学目标、常见误区和课堂提问；"
+                    "4) video_script_steps 返回4-6条；"
+                    "5) ppt_slides 返回5-8页，其中至少1页体现常见错误或提醒；"
+                    "6) 每页 bullet_points 返回2-4条短句；"
+                    "7) answer 字段使用 Markdown，至少包含“## 结论”“## 为什么这样做”“## 分步讲解”“## 常见错误”“## 课堂提问”“## 同类练习”六个部分。"
                 ),
             ),
             MessagesPlaceholder("history"),
             (
                 "human",
-                "教材范围：{textbook_label}\n\n检索知识：\n{context}\n\n老师当前需求：{question}",
+                "教材范围：{textbook_label}\n"
+                "教学目标：{teaching_goal}\n"
+                "学生情况：{student_profile}\n"
+                "讲解风格：{teaching_style_instruction}\n"
+                "详略要求：{depth_instruction}\n"
+                "易错点提醒：{misconception_focus}\n"
+                "课堂追问建议：{teacher_prompt}\n\n"
+                "检索知识：\n{context}\n\n老师当前需求：{question}",
             ),
         ]
     )
@@ -223,31 +288,41 @@ def _pick_game(question: str):
     }
 
 
-def generate_answer(grade: int, question: str, textbook: dict | None = None) -> dict:
+def generate_answer(grade: int, question: str, textbook: dict | None = None, teaching_preferences: dict | None = None) -> dict:
     """生成问答接口需要的答案、教材范围和知识点列表。"""
 
     scope = resolve_textbook_scope(grade, textbook)
     documents = retrieve_knowledge(question, grade, textbook=textbook)
     context = render_retrieved_context(documents)
+    teaching_context = build_teaching_quality_context(grade, question, documents, teaching_preferences)
     chain = _build_qa_chain()
 
     if chain is None:
         return {
-            "answer": build_rag_fallback_answer(grade, question, documents),
+            "answer": build_rag_fallback_answer(grade, question, documents, teaching_context),
             "textbook": serialize_textbook_scope(scope),
             "knowledge_points": serialize_knowledge_points(documents),
         }
 
     try:
+        fallback_answer = build_rag_fallback_answer(grade, question, documents, teaching_context)
         answer = chain.invoke({
             "grade": grade,
             "question": question,
             "context": context,
             "textbook_label": scope.label,
+            "teaching_goal": teaching_context["teaching_goal"],
+            "student_profile": teaching_context["student_profile"],
+            "teaching_style_instruction": teaching_context["teaching_style_instruction"],
+            "depth_instruction": teaching_context["depth_instruction"],
+            "misconception_focus": teaching_context["misconception_focus"],
+            "teacher_prompt": teaching_context["teacher_prompt"],
         })
+        if not answer_has_required_sections(answer):
+            answer = fallback_answer
     except Exception:
         logger.exception("LLM answer generation failed, falling back to RAG template.")
-        answer = build_rag_fallback_answer(grade, question, documents)
+        answer = build_rag_fallback_answer(grade, question, documents, teaching_context)
 
     return {
         "answer": answer,
@@ -256,14 +331,20 @@ def generate_answer(grade: int, question: str, textbook: dict | None = None) -> 
     }
 
 
-def generate_lesson_assets(grade: int, question: str, textbook: dict | None = None) -> dict:
+def generate_lesson_assets(
+    grade: int,
+    question: str,
+    textbook: dict | None = None,
+    teaching_preferences: dict | None = None,
+) -> dict:
     """生成课程素材接口需要的完整结果。"""
 
     scope = resolve_textbook_scope(grade, textbook)
     documents = retrieve_knowledge(question, grade, textbook=textbook)
     context = render_retrieved_context(documents)
     game = _pick_game(question)
-    fallback_assets = build_rag_fallback_assets(grade, question, documents, game)
+    teaching_context = build_teaching_quality_context(grade, question, documents, teaching_preferences)
+    fallback_assets = build_rag_fallback_assets(grade, question, documents, game, teaching_context)
     chain = _build_assets_chain()
 
     if chain is None:
@@ -274,11 +355,18 @@ def generate_lesson_assets(grade: int, question: str, textbook: dict | None = No
         }
 
     try:
+        fallback_answer = fallback_assets["answer"]
         raw = chain.invoke({
             "grade": grade,
             "question": question,
             "context": context,
             "textbook_label": scope.label,
+            "teaching_goal": teaching_context["teaching_goal"],
+            "student_profile": teaching_context["student_profile"],
+            "teaching_style_instruction": teaching_context["teaching_style_instruction"],
+            "depth_instruction": teaching_context["depth_instruction"],
+            "misconception_focus": teaching_context["misconception_focus"],
+            "teacher_prompt": teaching_context["teacher_prompt"],
         }).strip()
     except Exception:
         logger.exception("LLM asset generation failed, falling back to RAG template.")
@@ -317,7 +405,7 @@ def generate_lesson_assets(grade: int, question: str, textbook: dict | None = No
         game["reason"] = data["game_reason"].strip()
 
     return {
-        "answer": str(data.get("answer", fallback_assets["answer"])),
+        "answer": str(data.get("answer", fallback_answer)) if answer_has_required_sections(str(data.get("answer", ""))) else fallback_answer,
         "video": {
             "title": str(data.get("video_title", fallback_assets["video"]["title"])).strip()
             or fallback_assets["video"]["title"],
@@ -335,15 +423,25 @@ def generate_lesson_assets(grade: int, question: str, textbook: dict | None = No
     }
 
 
-def generate_video_script(grade: int, question: str, textbook: dict | None = None) -> dict:
+def generate_video_script(
+    grade: int,
+    question: str,
+    textbook: dict | None = None,
+    teaching_preferences: dict | None = None,
+) -> dict:
     """从课程素材结果中抽取视频脚本部分。"""
 
-    data = generate_lesson_assets(grade, question, textbook=textbook)
+    data = generate_lesson_assets(grade, question, textbook=textbook, teaching_preferences=teaching_preferences)
     return data["video"]
 
 
-def generate_ppt_outline(grade: int, question: str, textbook: dict | None = None) -> dict:
+def generate_ppt_outline(
+    grade: int,
+    question: str,
+    textbook: dict | None = None,
+    teaching_preferences: dict | None = None,
+) -> dict:
     """从课程素材结果中抽取 PPT 提纲部分。"""
 
-    data = generate_lesson_assets(grade, question, textbook=textbook)
+    data = generate_lesson_assets(grade, question, textbook=textbook, teaching_preferences=teaching_preferences)
     return data["ppt"]

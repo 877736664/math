@@ -9,6 +9,19 @@ const DEFAULT_GRADE = 3
 const DEFAULT_SEMESTER = '下册'
 const DEFAULT_TEXTBOOK_LABEL = '人教版小学数学'
 
+export function createDefaultTeachingPreferences() {
+  return {
+    teachingGoal: '理解算理',
+    studentLevel: '班级标准水平',
+    teachingStyle: '老师课堂版',
+    commonMisconceptions: '',
+  }
+}
+
+export function createDefaultOnlineState() {
+  return false
+}
+
 function normalizeMode(value) {
   if (value === '轻快') {
     return '简洁'
@@ -77,6 +90,55 @@ function normalizeKnowledgePoints(items) {
     sourceLabel: typeof item?.source_label === 'string' ? item.source_label : '',
     sourceUrl: typeof item?.source_url === 'string' ? item.source_url : '',
   }))
+}
+
+function normalizeOnlineResults(items) {
+  if (!Array.isArray(items)) {
+    return []
+  }
+
+  return items.map((item, index) => ({
+    id: `${item?.source || 'online'}-${index}`,
+    source: typeof item?.source === 'string' ? item.source : '在线搜索',
+    title: typeof item?.title === 'string' ? item.title : '未命名文档',
+    summary: typeof item?.summary === 'string' ? item.summary : '',
+    url: typeof item?.url === 'string' ? item.url : '',
+  }))
+}
+
+function normalizeTeachingPreferences(item) {
+  const fallback = createDefaultTeachingPreferences()
+
+  if (!item || typeof item !== 'object') {
+    return fallback
+  }
+
+  return {
+    teachingGoal:
+      typeof item.teachingGoal === 'string'
+        ? item.teachingGoal
+        : typeof item.teaching_goal === 'string'
+          ? item.teaching_goal
+          : fallback.teachingGoal,
+    studentLevel:
+      typeof item.studentLevel === 'string'
+        ? item.studentLevel
+        : typeof item.student_level === 'string'
+          ? item.student_level
+          : fallback.studentLevel,
+    teachingStyle:
+      typeof item.teachingStyle === 'string'
+        ? item.teachingStyle
+        : typeof item.teaching_style === 'string'
+          ? item.teaching_style
+          : fallback.teachingStyle,
+    commonMisconceptions:
+      typeof item.commonMisconceptions === 'string'
+        ? item.commonMisconceptions
+        : typeof item.common_misconceptions === 'string'
+          ? item.common_misconceptions
+          : fallback.commonMisconceptions,
+  }
 }
 
 function normalizeTurns(items, fallbackQuestion, fallbackAnswer, fallbackStatus, fallbackError, createdAt, updatedAt) {
@@ -151,6 +213,14 @@ export function createConversationId() {
   return `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+export function createVariationSeed() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return `variant-${globalThis.crypto.randomUUID()}`
+  }
+
+  return `variant-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export function createEmptyVideoState() {
   return {
     status: 'idle',
@@ -182,6 +252,7 @@ export function createEmptyAnimationGameState() {
     summary: '',
     html: '',
     demoSpec: null,
+    variationSeed: '',
     error: '',
     updatedAt: '',
   }
@@ -277,27 +348,39 @@ function normalizeAnimationGameState(item) {
   }
 
   if (typeof item.status === 'string') {
+      return {
+        status: item.status,
+        title: typeof item.title === 'string' ? item.title : '',
+        summary: typeof item.summary === 'string' ? item.summary : '',
+        html: typeof item.html === 'string' ? item.html : '',
+        demoSpec: item.demoSpec && typeof item.demoSpec === 'object' ? item.demoSpec : null,
+        variationSeed:
+          typeof item.variationSeed === 'string'
+            ? item.variationSeed
+            : typeof item?.demoSpec?.variation_seed === 'string'
+              ? item.demoSpec.variation_seed
+              : '',
+        error: typeof item.error === 'string' ? item.error : '',
+        updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : '',
+      }
+  }
+
     return {
-      status: item.status,
+      status: 'done',
       title: typeof item.title === 'string' ? item.title : '',
       summary: typeof item.summary === 'string' ? item.summary : '',
       html: typeof item.html === 'string' ? item.html : '',
-      demoSpec: item.demoSpec && typeof item.demoSpec === 'object' ? item.demoSpec : null,
-      error: typeof item.error === 'string' ? item.error : '',
-      updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : '',
+      demoSpec: item.demo_spec && typeof item.demo_spec === 'object' ? item.demo_spec : null,
+      variationSeed:
+        typeof item.variation_seed === 'string'
+          ? item.variation_seed
+          : typeof item?.demo_spec?.variation_seed === 'string'
+            ? item.demo_spec.variation_seed
+            : '',
+      error: '',
+      updatedAt: '',
     }
   }
-
-  return {
-    status: 'done',
-    title: typeof item.title === 'string' ? item.title : '',
-    summary: typeof item.summary === 'string' ? item.summary : '',
-    html: typeof item.html === 'string' ? item.html : '',
-    demoSpec: item.demo_spec && typeof item.demo_spec === 'object' ? item.demo_spec : null,
-    error: '',
-    updatedAt: '',
-  }
-}
 
 export function normalizeConversation(item) {
   // 统一兼容老版本历史记录、当前版本状态字段和后端 snake_case 响应。
@@ -344,7 +427,10 @@ export function normalizeConversation(item) {
       updatedAt,
     ),
     textbook: normalizeTextbookState(item?.textbook, normalizedGrade, normalizedSemester),
+    teachingPreferences: normalizeTeachingPreferences(item?.teachingPreferences ?? item?.teaching_preferences),
+    networkEnabled: typeof item?.networkEnabled === 'boolean' ? item.networkEnabled : Boolean(item?.network_enabled),
     knowledgePoints: normalizeKnowledgePoints(item?.knowledgePoints ?? item?.knowledge_points),
+    onlineResults: normalizeOnlineResults(item?.onlineResults ?? item?.online_results),
     fileName: typeof item?.fileName === 'string' ? item.fileName : '',
     answerStatus,
     answer: typeof item?.answer === 'string' ? item.answer : '',

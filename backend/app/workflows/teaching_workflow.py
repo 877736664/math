@@ -10,20 +10,23 @@ from typing import Literal, TypedDict, cast
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
-from app.llm_service import _build_assets_chain, _build_qa_chain, _pick_game, build_history_messages, logger
-from app.rag_service import (
+from app.services.llm_service import _build_assets_chain, _build_qa_chain, _pick_game, build_history_messages, logger
+from app.services.rag_service import (
     build_rag_fallback_answer,
     build_rag_fallback_assets,
     render_retrieved_context,
     retrieve_knowledge,
 )
-from app.textbook_repository import (
+from app.repositories.textbook_repository import (
     KnowledgeDocument,
     TextbookScope,
     resolve_textbook_scope,
     serialize_knowledge_points,
     serialize_textbook_scope,
 )
+from app.services.teaching_quality_service import build_teaching_quality_context
+from app.services.teaching_quality_service import answer_has_required_sections
+from app.services.online_search_service import render_online_search_context, search_online_documents
 
 
 WorkflowMode = Literal["answer", "assets"]
@@ -38,9 +41,13 @@ class TeachingWorkflowState(TypedDict, total=False):
     retrieval_question: str
     messages: list[dict]
     textbook: dict | None
+    teaching_preferences: dict | None
+    network_enabled: bool
     scope: TextbookScope
     documents: list[KnowledgeDocument]
     context: str
+    teaching_context: dict
+    online_results: list[dict]
     payload: dict
 
 
@@ -53,6 +60,8 @@ class TeachingWorkflowInputState(TypedDict):
     retrieval_question: str
     messages: list[dict]
     textbook: dict | None
+    teaching_preferences: dict | None
+    network_enabled: bool
 
 
 class ResolvedTeachingWorkflowState(TypedDict):
@@ -64,9 +73,13 @@ class ResolvedTeachingWorkflowState(TypedDict):
     retrieval_question: str
     messages: list[dict]
     textbook: dict | None
+    teaching_preferences: dict | None
+    network_enabled: bool
     scope: TextbookScope
     documents: list[KnowledgeDocument]
     context: str
+    teaching_context: dict
+    online_results: list[dict]
     payload: dict
 
 
@@ -181,11 +194,19 @@ def _prepare_context(state: TeachingWorkflowInputState) -> TeachingWorkflowState
     textbook = payload.get("textbook")
     scope = resolve_textbook_scope(grade, textbook)
     documents = retrieve_knowledge(question, grade, textbook=textbook)
+    teaching_context = build_teaching_quality_context(grade, payload["question"], documents, payload.get("teaching_preferences"))
+    online_results = search_online_documents(payload["question"]) if payload.get("network_enabled") else []
+    online_context = render_online_search_context(online_results)
+    merged_context = render_retrieved_context(documents)
+    if online_context:
+        merged_context = f"{merged_context}\n\n## 联网参考资料\n{online_context}" if merged_context else online_context
 
     return {
         "scope": scope,
         "documents": documents,
-        "context": render_retrieved_context(documents),
+        "context": merged_context,
+        "teaching_context": teaching_context,
+        "online_results": online_results,
     }
 
 
@@ -200,7 +221,11 @@ def _latest_assistant_text(messages: list[dict] | None) -> str:
     return ""
 
 
-def _build_answer_fallback(state: TeachingWorkflowInputState, documents: list[KnowledgeDocument]) -> str:
+def _build_answer_fallback(
+    state: TeachingWorkflowInputState,
+    documents: list[KnowledgeDocument],
+    teaching_context: dict | None = None,
+) -> str:
     """构造答案兜底逻辑，并兼容“更短一点”这类压缩请求。"""
 
     payload = cast(TeachingWorkflowInputState, state)
@@ -222,7 +247,7 @@ def _build_answer_fallback(state: TeachingWorkflowInputState, documents: list[Kn
             "把题目中的数字换一组，再试着自己列式。"
         )
 
-    return build_rag_fallback_answer(payload["grade"], retrieval_question, documents)
+    return build_rag_fallback_answer(payload["grade"], retrieval_question, documents, teaching_context)
 
 
 def _route_mode(state: TeachingWorkflowInputState) -> WorkflowMode:
@@ -236,13 +261,15 @@ def _answer_payload(state: ResolvedTeachingWorkflowState) -> TeachingWorkflowSta
     payload = cast(ResolvedTeachingWorkflowState, state)
     scope = payload["scope"]
     documents = payload["documents"]
+    teaching_context = payload["teaching_context"]
     chain = _build_qa_chain()
     history = build_history_messages(payload.get("messages"), payload["question"])
 
     if chain is None:
-        answer = _build_answer_fallback(state, documents)
+        answer = _build_answer_fallback(state, documents, teaching_context)
     else:
         try:
+            fallback_answer = _build_answer_fallback(state, documents, teaching_context)
             answer = chain.invoke(
                 {
                     "grade": payload["grade"],
@@ -250,17 +277,26 @@ def _answer_payload(state: ResolvedTeachingWorkflowState) -> TeachingWorkflowSta
                     "context": payload["context"],
                     "history": history,
                     "textbook_label": scope.label,
+                    "teaching_goal": teaching_context["teaching_goal"],
+                    "student_profile": teaching_context["student_profile"],
+                    "teaching_style_instruction": teaching_context["teaching_style_instruction"],
+                    "depth_instruction": teaching_context["depth_instruction"],
+                    "misconception_focus": teaching_context["misconception_focus"],
+                    "teacher_prompt": teaching_context["teacher_prompt"],
                 }
             )
+            if not answer_has_required_sections(answer):
+                answer = fallback_answer
         except Exception:
             logger.exception("LLM answer generation failed, falling back to RAG template.")
-            answer = _build_answer_fallback(state, documents)
+            answer = _build_answer_fallback(state, documents, teaching_context)
 
     return {
         "payload": {
             "answer": answer,
             "textbook": serialize_textbook_scope(scope),
             "knowledge_points": serialize_knowledge_points(documents),
+            "online_results": payload.get("online_results", []),
         }
     }
 
@@ -271,9 +307,12 @@ def _assets_payload(state: ResolvedTeachingWorkflowState) -> TeachingWorkflowSta
     payload = cast(ResolvedTeachingWorkflowState, state)
     scope = payload["scope"]
     documents = payload["documents"]
+    teaching_context = payload["teaching_context"]
     history = build_history_messages(payload.get("messages"), payload["question"])
     game = _pick_game(payload["retrieval_question"])
-    fallback_assets = build_rag_fallback_assets(payload["grade"], payload["retrieval_question"], documents, game)
+    fallback_assets = build_rag_fallback_assets(
+        payload["grade"], payload["retrieval_question"], documents, game, teaching_context
+    )
     chain = _build_assets_chain()
 
     if chain is None:
@@ -282,10 +321,12 @@ def _assets_payload(state: ResolvedTeachingWorkflowState) -> TeachingWorkflowSta
                 **fallback_assets,
                 "textbook": serialize_textbook_scope(scope),
                 "knowledge_points": serialize_knowledge_points(documents),
+                "online_results": payload.get("online_results", []),
             }
         }
 
     try:
+        fallback_answer = fallback_assets["answer"]
         raw = chain.invoke(
                 {
                     "grade": payload["grade"],
@@ -293,6 +334,12 @@ def _assets_payload(state: ResolvedTeachingWorkflowState) -> TeachingWorkflowSta
                     "context": payload["context"],
                     "history": history,
                     "textbook_label": scope.label,
+                    "teaching_goal": teaching_context["teaching_goal"],
+                    "student_profile": teaching_context["student_profile"],
+                    "teaching_style_instruction": teaching_context["teaching_style_instruction"],
+                    "depth_instruction": teaching_context["depth_instruction"],
+                    "misconception_focus": teaching_context["misconception_focus"],
+                    "teacher_prompt": teaching_context["teacher_prompt"],
                 }
         ).strip()
     except Exception:
@@ -302,6 +349,7 @@ def _assets_payload(state: ResolvedTeachingWorkflowState) -> TeachingWorkflowSta
                 **fallback_assets,
                 "textbook": serialize_textbook_scope(scope),
                 "knowledge_points": serialize_knowledge_points(documents),
+                "online_results": payload.get("online_results", []),
             }
         }
 
@@ -313,6 +361,7 @@ def _assets_payload(state: ResolvedTeachingWorkflowState) -> TeachingWorkflowSta
                 **fallback_assets,
                 "textbook": serialize_textbook_scope(scope),
                 "knowledge_points": serialize_knowledge_points(documents),
+                "online_results": payload.get("online_results", []),
             }
         }
 
@@ -337,7 +386,7 @@ def _assets_payload(state: ResolvedTeachingWorkflowState) -> TeachingWorkflowSta
 
     return {
         "payload": {
-            "answer": str(data.get("answer", fallback_assets["answer"])),
+            "answer": str(data.get("answer", fallback_answer)) if answer_has_required_sections(str(data.get("answer", ""))) else fallback_answer,
             "video": {
                 "title": str(data.get("video_title", fallback_assets["video"]["title"])).strip()
                 or fallback_assets["video"]["title"],
@@ -352,6 +401,7 @@ def _assets_payload(state: ResolvedTeachingWorkflowState) -> TeachingWorkflowSta
             "game": game,
             "textbook": serialize_textbook_scope(scope),
             "knowledge_points": serialize_knowledge_points(documents),
+            "online_results": payload.get("online_results", []),
         }
     }
 
@@ -384,6 +434,8 @@ def run_teaching_workflow(
     question: str,
     textbook: dict | None = None,
     messages: list[dict] | None = None,
+    teaching_preferences: dict | None = None,
+    network_enabled: bool = False,
 ) -> dict:
     """运行指定模式的教学工作流，并返回最终 payload。"""
 
@@ -398,6 +450,8 @@ def run_teaching_workflow(
             "retrieval_question": retrieval_question,
             "messages": normalized_messages,
             "textbook": textbook,
+            "teaching_preferences": teaching_preferences,
+            "network_enabled": network_enabled,
         }
     )
     return result["payload"]
@@ -408,10 +462,20 @@ def generate_answer(
     question: str,
     textbook: dict | None = None,
     messages: list[dict] | None = None,
+    teaching_preferences: dict | None = None,
+    network_enabled: bool = False,
 ) -> dict:
     """工作流版问答入口。"""
 
-    return run_teaching_workflow("answer", grade, question, textbook=textbook, messages=messages)
+    return run_teaching_workflow(
+        "answer",
+        grade,
+        question,
+        textbook=textbook,
+        messages=messages,
+        teaching_preferences=teaching_preferences,
+        network_enabled=network_enabled,
+    )
 
 
 def generate_lesson_assets(
@@ -419,10 +483,20 @@ def generate_lesson_assets(
     question: str,
     textbook: dict | None = None,
     messages: list[dict] | None = None,
+    teaching_preferences: dict | None = None,
+    network_enabled: bool = False,
 ) -> dict:
     """工作流版课程素材入口。"""
 
-    return run_teaching_workflow("assets", grade, question, textbook=textbook, messages=messages)
+    return run_teaching_workflow(
+        "assets",
+        grade,
+        question,
+        textbook=textbook,
+        messages=messages,
+        teaching_preferences=teaching_preferences,
+        network_enabled=network_enabled,
+    )
 
 
 def generate_video_script(
@@ -430,10 +504,19 @@ def generate_video_script(
     question: str,
     textbook: dict | None = None,
     messages: list[dict] | None = None,
+    teaching_preferences: dict | None = None,
+    network_enabled: bool = False,
 ) -> dict:
     """从课程素材里提取视频脚本。"""
 
-    data = generate_lesson_assets(grade, question, textbook=textbook, messages=messages)
+    data = generate_lesson_assets(
+        grade,
+        question,
+        textbook=textbook,
+        messages=messages,
+        teaching_preferences=teaching_preferences,
+        network_enabled=network_enabled,
+    )
     return data["video"]
 
 
@@ -442,8 +525,17 @@ def generate_ppt_outline(
     question: str,
     textbook: dict | None = None,
     messages: list[dict] | None = None,
+    teaching_preferences: dict | None = None,
+    network_enabled: bool = False,
 ) -> dict:
     """从课程素材里提取 PPT 大纲。"""
 
-    data = generate_lesson_assets(grade, question, textbook=textbook, messages=messages)
+    data = generate_lesson_assets(
+        grade,
+        question,
+        textbook=textbook,
+        messages=messages,
+        teaching_preferences=teaching_preferences,
+        network_enabled=network_enabled,
+    )
     return data["ppt"]

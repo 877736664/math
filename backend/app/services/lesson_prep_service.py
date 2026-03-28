@@ -10,8 +10,8 @@ from functools import lru_cache
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
-from app.llm_service import _create_llm
-from app.rag_service import render_retrieved_context, retrieve_knowledge
+from app.services.llm_service import _create_llm
+from app.services.rag_service import render_retrieved_context, retrieve_knowledge
 
 logger = logging.getLogger(__name__)
 

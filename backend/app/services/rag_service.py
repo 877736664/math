@@ -9,10 +9,45 @@ import re
 from html import unescape
 from urllib import error, request
 
-from app.textbook_repository import KnowledgeDocument, TextbookScope, resolve_textbook_scope
+from app.repositories.textbook_repository import KnowledgeDocument, TextbookScope, resolve_textbook_scope
+from app.services.teaching_quality_service import build_teaching_quality_context
 
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_document_text(value: str) -> str:
+    return re.sub(r"\s+", "", value or "").strip().lower()
+
+
+def _document_identity(document: KnowledgeDocument) -> tuple[str, str]:
+    title_key = _normalize_document_text(document.title)
+    summary_key = _normalize_document_text(document.summary[:80])
+    return title_key, summary_key
+
+
+def _dedupe_documents(documents: list[KnowledgeDocument], limit: int) -> list[KnowledgeDocument]:
+    """按标题和摘要做轻量去重，避免同一知识点重复展示。"""
+
+    deduped: list[KnowledgeDocument] = []
+    seen_keys: set[tuple[str, str]] = set()
+    seen_titles: set[str] = set()
+
+    for document in documents:
+        identity = _document_identity(document)
+        title_key = identity[0]
+        if identity in seen_keys:
+            continue
+        if title_key and title_key in seen_titles:
+            continue
+        seen_keys.add(identity)
+        if title_key:
+            seen_titles.add(title_key)
+        deduped.append(document)
+        if len(deduped) >= limit:
+            break
+
+    return deduped
 
 def _ragflow_base_url() -> str:
     return os.getenv("RAGFLOW_BASE_URL", "").strip().rstrip("/")
@@ -95,7 +130,7 @@ def _retrieve_knowledge_from_ragflow(
         return []
 
     documents = [_chunk_to_document(chunk, scope, grade, question) for chunk in chunks if isinstance(chunk, dict)]
-    return documents[:top_k]
+    return _dedupe_documents(documents, top_k)
 
 
 def _chunk_to_document(chunk: dict, scope: TextbookScope, grade: int, question: str) -> KnowledgeDocument:
@@ -396,12 +431,18 @@ def solve_question_with_docs(question: str, documents: list[KnowledgeDocument]) 
     return None
 
 
-def build_rag_fallback_answer(grade: int, question: str, documents: list[KnowledgeDocument]) -> str:
+def build_rag_fallback_answer(
+    grade: int,
+    question: str,
+    documents: list[KnowledgeDocument],
+    teaching_context: dict | None = None,
+) -> str:
     """在 LLM 不可用或生成失败时，输出一份带教材定位的 Markdown 答案。"""
 
     curriculum_labels = "\n".join(f"- {label}" for label in _collect_curriculum_labels(documents))
     document_titles = "\n".join(f"- {document.title}（{document.curriculum_label}）" for document in documents)
     solution = solve_question_with_docs(question, documents)
+    quality = teaching_context or build_teaching_quality_context(grade, question, documents)
 
     if solution:
         steps = "\n".join(f"{index}. {step}" for index, step in enumerate(solution["steps"], start=1))
@@ -412,8 +453,16 @@ def build_rag_fallback_answer(grade: int, question: str, documents: list[Knowled
             f"{document_titles}\n\n"
             "## 结论\n"
             f"{solution['conclusion']}\n\n"
-            "## 解题步骤\n"
+            "## 为什么这样做\n"
+            f"- 教学目标：{quality['teaching_goal']}\n"
+            f"- 讲解重点：{quality['teaching_strategy']}\n\n"
+            "## 分步讲解\n"
             f"{steps}\n\n"
+            "## 常见错误\n"
+            f"- {quality['misconception_focus']}\n\n"
+            "## 课堂提问\n"
+            f"- {quality['teacher_prompt']}\n"
+            "- 如果把题目里的数字换一组，你还会用同样的方法吗？\n\n"
             "## 同类练习\n"
             f"{solution['practice']}"
         )
@@ -426,13 +475,21 @@ def build_rag_fallback_answer(grade: int, question: str, documents: list[Knowled
         f"{document_titles}\n\n"
         "## 结论\n"
         f"这道题建议先按小学{grade}年级对应教材的知识点拆题，再决定具体算法。\n\n"
+        "## 为什么这样做\n"
+        f"- 教学目标：{quality['teaching_goal']}\n"
+        f"- 讲解重点：{quality['teaching_strategy']}\n\n"
         "## 可参考的知识摘要\n"
         f"{summaries}\n\n"
-        "## 解题步骤\n"
+        "## 分步讲解\n"
         "1. 先圈出题目中的数字、单位和关键词。\n"
         "2. 根据关键词判断是加法、减法、乘法、除法还是图形公式。\n"
         "3. 对照教材知识点列式并计算。\n"
         "4. 把结果代回原题检查是否合理。\n\n"
+        "## 常见错误\n"
+        f"- {quality['misconception_focus']}\n\n"
+        "## 课堂提问\n"
+        f"- {quality['teacher_prompt']}\n"
+        "- 你能先不算，直接说说这题应该先看什么吗？\n\n"
         "## 同类练习\n"
         f"{_pick_practice_question(documents)}"
     )
@@ -443,10 +500,12 @@ def build_rag_fallback_assets(
     question: str,
     documents: list[KnowledgeDocument],
     game: dict,
+    teaching_context: dict | None = None,
 ) -> dict:
     """基于检索结果构造视频、PPT、游戏推荐等素材的兜底结构。"""
 
-    answer = build_rag_fallback_answer(grade, question, documents)
+    quality = teaching_context or build_teaching_quality_context(grade, question, documents)
+    answer = build_rag_fallback_answer(grade, question, documents, quality)
     solution = solve_question_with_docs(question, documents)
     lead_document = documents[0]
     curriculum_labels = _collect_curriculum_labels(documents)
@@ -486,6 +545,10 @@ def build_rag_fallback_assets(
         {
             "title": "解题步骤",
             "bullet_points": solution["steps"][:4] if solution else list(lead_document.key_points[:3]),
+        },
+        {
+            "title": "常见错误",
+            "bullet_points": [quality["misconception_focus"], quality["teacher_prompt"]],
         },
         {
             "title": "同类练习",
