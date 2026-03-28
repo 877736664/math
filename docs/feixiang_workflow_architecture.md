@@ -19,7 +19,8 @@ flowchart LR
     end
 
     subgraph ORCH[编排层]
-        L[llm_service.py\n教学意图编排与素材生成]
+        W[teaching_workflow_service.py\nLangGraph 教学工作流编排]
+        L[llm_service.py\nLLM 链与提示模板]
         R[rag_service.py\n题型识别 / 知识检索 / 规则解题]
     end
 
@@ -52,9 +53,10 @@ flowchart LR
     M --> AG
     M --> PX
 
-    QA --> L
-    VS --> L
-    PO --> L
+    QA --> W
+    VS --> W
+    PO --> W
+    W --> L
     L --> R
     AG --> R
 
@@ -119,13 +121,18 @@ flowchart TD
 
 ### 3. 教学意图编排层
 
+- `backend/app/teaching_workflow_service.py`
+  - 使用 `LangGraph` 串起“检索上下文 -> 生成答案 / 生成素材”的统一工作流
+  - 负责按 `mode` 路由到问答或素材节点
+  - 把后续扩展多种教学产物的入口先固定下来
+
 - `backend/app/llm_service.py`
-  - 相当于“教学意图 -> 产物类型”的编排层
-  - 负责把同一道题转换成：
+  - 现在更聚焦于 LLM 链、提示模板和输出格式
+  - 为 `LangGraph` 节点提供：
     - 讲解答案
     - 视频脚本
     - PPT 提纲
-  - 这里最接近飞象老师的 `AI_TEACHING_INTERACTION` 主工作流
+  - 作为教学工作流里的生成能力层
 
 ### 4. 题型与知识底座
 
